@@ -212,7 +212,7 @@ function registerGetMessages(api: OpenClawPluginApi) {
           );
           assertLarkOk(res);
 
-          return formatAndReturn(res, config, log, client);
+          return await formatAndReturn(res, config, log, client);
         } catch (err) {
           return await handleInvokeErrorWithAutoAuth(err, config);
         }
@@ -292,7 +292,7 @@ function registerGetThreadMessages(api: OpenClawPluginApi) {
           );
           assertLarkOk(res);
 
-          return formatAndReturn(res, config, log, client);
+          return await formatAndReturn(res, config, log, client);
         } catch (err) {
           return await handleInvokeErrorWithAutoAuth(err, config);
         }
