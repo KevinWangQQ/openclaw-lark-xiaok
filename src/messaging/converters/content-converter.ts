@@ -14,26 +14,15 @@
 
 import type { MentionInfo } from '../types';
 import { converters } from './index';
-import { escapeRegExp } from './utils';
 import type { ApiMessageItem, ConvertContext, ConvertResult } from './types';
 import { getUserNameCache } from '../inbound/user-name-cache';
+import { extractMentionOpenId, resolveMentions } from './mention-utils';
 
 // Re-export types for convenience
 export type { ApiMessageItem, ConvertContext, ConvertResult, ContentConverterFn } from './types';
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/** 从 mention 的 id 字段提取 open_id（兼容事件推送的对象格式和 API 响应的字符串格式） */
-export function extractMentionOpenId(id: unknown): string {
-  if (typeof id === 'string') return id;
-  if (id != null && typeof id === 'object' && 'open_id' in id) {
-    const openId = (id as Record<string, unknown>).open_id;
-    return typeof openId === 'string' ? openId : '';
-  }
-  return '';
-}
+// Re-export mention utilities so existing consumers are not broken.
+export { extractMentionOpenId, resolveMentions } from './mention-utils';
 
 // ---------------------------------------------------------------------------
 // Convert
@@ -100,29 +89,3 @@ export function buildConvertContextFromItem(
   };
 }
 
-// ---------------------------------------------------------------------------
-// Mention resolution helper
-// ---------------------------------------------------------------------------
-
-/**
- * Resolve mention placeholders in text.
- *
- * - Bot mentions: remove the placeholder key and any preceding `@botName`
- *   entirely (with trailing whitespace).
- * - Non-bot mentions: replace the placeholder key with readable `@name`.
- */
-export function resolveMentions(text: string, ctx: ConvertContext): string {
-  if (ctx.mentions.size === 0) return text;
-
-  let result = text;
-  for (const [key, info] of ctx.mentions) {
-    if (info.isBot && ctx.stripBotMentions) {
-      // 仅在事件推送场景才删除 bot mention
-      result = result.replace(new RegExp(`@${escapeRegExp(info.name)}\\s*`, 'g'), '').trim();
-      result = result.replace(new RegExp(escapeRegExp(key) + '\\s*', 'g'), '').trim();
-    } else {
-      result = result.replace(new RegExp(escapeRegExp(key), 'g'), `@${info.name}`);
-    }
-  }
-  return result;
-}
