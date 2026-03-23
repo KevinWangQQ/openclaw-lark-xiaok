@@ -16,6 +16,7 @@ import { isMessageExpired } from '../messaging/inbound/dedup';
 import { withTicket } from '../core/lark-ticket';
 import { larkLogger } from '../core/lark-logger';
 import { handleCardAction } from '../tools/auto-auth';
+import { handleAskUserAction } from '../tools/ask-user-question';
 import { enqueueFeishuChatTask, buildQueueKey, hasActiveTask, getActiveDispatcher } from './chat-queue';
 import { extractRawTextFromEvent, isLikelyAbortText } from './abort-detect';
 import type { MonitorContext } from './types';
@@ -239,6 +240,12 @@ export async function handleBotMembershipEvent(
 
 export async function handleCardActionEvent(ctx: MonitorContext, data: unknown): Promise<unknown> {
   try {
+    // AskUserQuestion card interactions — must be checked first because
+    // they resolve a blocking Promise in the tool's execute().
+    const askResult = handleAskUserAction(data, ctx.cfg, ctx.accountId);
+    if (askResult !== undefined) return askResult;
+
+    // Auto-auth card actions (OAuth device flow, app scope confirmation)
     return await handleCardAction(data, ctx.cfg, ctx.accountId);
   } catch (err) {
     elog.warn(`card.action.trigger handler error: ${err}`);

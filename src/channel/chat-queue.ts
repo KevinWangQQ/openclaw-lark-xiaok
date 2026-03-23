@@ -23,6 +23,19 @@ const chatQueues = new Map<string, Promise<void>>();
 const activeDispatchers = new Map<string, ActiveDispatcherEntry>();
 
 /**
+ * Per-key yield resolvers.
+ *
+ * When a running task calls `yieldCurrentTask(key)`, the queue slot resolves
+ * early so subsequent tasks can proceed — even though the current task
+ * continues running in the background.  This is used by AskUserQuestion
+ * to avoid blocking the entire group chat while waiting for user input.
+ *
+ * The resolver is registered when the task *starts executing* (not when
+ * enqueued), so it always refers to the currently running task for that key.
+ */
+const taskYieldResolvers = new Map<string, () => void>();
+
+/**
  * Append `:thread:{threadId}` suffix when threadId is present.
  * Consistent with the SDK's `:thread:` separator convention.
  */
@@ -61,7 +74,33 @@ export function enqueueFeishuChatTask(params: {
   const key = buildQueueKey(accountId, chatId, threadId);
   const prev = chatQueues.get(key) ?? Promise.resolve();
   const status: QueueStatus = chatQueues.has(key) ? 'queued' : 'immediate';
-  const next = prev.then(task, task); // continue queue even if previous task failed
+
+  // Wrap task so we can register a per-execution yield resolver.
+  // `yieldPromise` resolves when `yieldCurrentTask(key)` is called,
+  // allowing the queue to advance while the task keeps running.
+  let yieldResolve: () => void;
+  const yieldPromise = new Promise<void>((resolve) => {
+    yieldResolve = resolve;
+  });
+
+  const wrappedTask = async (): Promise<void> => {
+    taskYieldResolvers.set(key, yieldResolve!);
+    try {
+      await task();
+    } finally {
+      // If task completes without yielding, clean up the resolver
+      if (taskYieldResolvers.get(key) === yieldResolve!) {
+        taskYieldResolvers.delete(key);
+      }
+      // Also resolve the yield promise so the queue slot cleans up
+      yieldResolve!();
+    }
+  };
+
+  const taskPromise = prev.then(wrappedTask, wrappedTask);
+
+  // Queue slot resolves when either: task completes OR task yields
+  const next = Promise.race([taskPromise, yieldPromise]);
   chatQueues.set(key, next);
 
   const cleanup = (): void => {
@@ -72,11 +111,30 @@ export function enqueueFeishuChatTask(params: {
 
   next.then(cleanup, cleanup);
 
-  return { status, promise: next };
+  return { status, promise: taskPromise };
+}
+
+/**
+ * Yield the current task's queue position for the given key.
+ *
+ * After yielding, subsequent tasks in the queue will proceed immediately
+ * while the current task continues running in the background.
+ *
+ * Used by AskUserQuestion to avoid blocking other users in group chats
+ * while waiting for a card-based response.
+ */
+export function yieldCurrentTask(accountId: string, chatId: string, threadId?: string): void {
+  const key = buildQueueKey(accountId, chatId, threadId);
+  const resolver = taskYieldResolvers.get(key);
+  if (resolver) {
+    resolver();
+    taskYieldResolvers.delete(key);
+  }
 }
 
 /** @internal Test-only: reset all queue and dispatcher state. */
 export function _resetChatQueueState(): void {
   chatQueues.clear();
   activeDispatchers.clear();
+  taskYieldResolvers.clear();
 }
