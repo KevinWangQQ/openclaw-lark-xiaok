@@ -1,0 +1,151 @@
+/**
+ * Copyright (c) 2026 ByteDance Ltd. and/or its affiliates
+ * SPDX-License-Identifier: MIT
+ *
+ * VC meeting invited event handler for the Lark/Feishu channel plugin.
+ *
+ * Handles `vc.bot.meeting_invited_v1` by converting the event into a
+ * synthetic natural-language inbound and dispatching it through the
+ * standard OpenClaw agent pipeline.
+ */
+
+import * as crypto from 'node:crypto'
+import type { ClawdbotConfig, RuntimeEnv } from 'openclaw/plugin-sdk'
+import type { HistoryEntry } from 'openclaw/plugin-sdk/reply-history'
+import type { FeishuVcMeetingInvitedEvent, MessageContext, VcMeetingInvitedSyntheticEvent } from '../types'
+import { SYNTHETIC_VC_CHAT_ID, SYNTHETIC_VC_CHAT_TYPE } from '../../core/synthetic-target'
+import { getLarkAccount } from '../../core/accounts'
+import { larkLogger } from '../../core/lark-logger'
+import { dispatchToAgent } from './dispatch'
+import { resolveVcSender } from './vc-sender'
+
+const logger = larkLogger('inbound/vc-meeting-invited-handler')
+
+function buildSyntheticEvent(
+  event: FeishuVcMeetingInvitedEvent,
+  botOpenId?: string,
+): VcMeetingInvitedSyntheticEvent | null {
+  const meetingNo = event.meeting?.meeting_no?.trim() ?? ''
+
+  // Both meeting_no and inviter identity are required for this event.
+  if (!meetingNo) {
+    return null
+  }
+
+  const sender = resolveVcSender(event, botOpenId)
+  if (!sender.senderId) {
+    return null
+  }
+
+  return {
+    eventType: 'vc.bot.meeting_invited_v1',
+    source: 'feishu-vc-event',
+    meetingId: event.meeting?.id?.trim() || undefined,
+    meetingNo,
+    topic: event.meeting?.topic?.trim() || undefined,
+    senderId: sender.senderId,
+    senderOpenId: sender.senderOpenId,
+    senderUserId: sender.senderUserId,
+    senderUnionId: sender.senderUnionId,
+    senderName: sender.senderName,
+    inviteTime: event.invite_time?.trim() || undefined,
+  }
+}
+
+function buildSyntheticContext(event: VcMeetingInvitedSyntheticEvent): MessageContext {
+  const syntheticText = `Join the meeting with meeting number ${event.meetingNo}.`
+  const syntheticMessageId = `vc-invited:${event.meetingNo}:${event.inviteTime ?? crypto.randomUUID()}`
+
+  // VC-invited events have no real chat/thread — they are service-to-service
+  // triggers. Using the inviter's open_id as chatId would cause downstream
+  // senders (reply / card / media) to fire off unsolicited DMs to the inviter
+  // whenever the agent produced any output. Use a synthetic sentinel instead
+  // and let IM-facing deliverers short-circuit on it (see SYNTHETIC_VC_CHAT_ID).
+  return {
+    chatId: SYNTHETIC_VC_CHAT_ID,
+    messageId: syntheticMessageId,
+    senderId: event.senderId,
+    senderName: event.senderName,
+    chatType: SYNTHETIC_VC_CHAT_TYPE,
+    content: syntheticText,
+    contentType: 'text',
+    resources: [],
+    mentions: [],
+    mentionAll: false,
+    rawMessage: {
+      message_id: syntheticMessageId,
+      chat_id: SYNTHETIC_VC_CHAT_ID,
+      chat_type: SYNTHETIC_VC_CHAT_TYPE,
+      message_type: 'text',
+      content: JSON.stringify({ text: syntheticText }),
+      create_time: event.inviteTime ?? String(Date.now()),
+    },
+    rawSender: {
+      sender_id: {
+        ...(event.senderOpenId ? { open_id: event.senderOpenId } : {}),
+        ...(event.senderUserId ? { user_id: event.senderUserId } : {}),
+        ...(event.senderUnionId ? { union_id: event.senderUnionId } : {}),
+      },
+      sender_type: 'user',
+    },
+  }
+}
+
+export async function handleFeishuVcMeetingInvited(params: {
+  cfg: ClawdbotConfig
+  event: FeishuVcMeetingInvitedEvent
+  runtime?: RuntimeEnv
+  botOpenId?: string
+  chatHistories?: Map<string, HistoryEntry[]>
+  accountId?: string
+}): Promise<void> {
+  const { cfg, event, runtime, botOpenId, chatHistories, accountId } = params
+  const log = runtime?.log ?? ((...args: unknown[]) => logger.info(args.map(String).join(' ')))
+  const error = runtime?.error ?? ((...args: unknown[]) => logger.error(args.map(String).join(' ')))
+
+  const syntheticEvent = buildSyntheticEvent(event, botOpenId)
+  if (!syntheticEvent) {
+    log(`feishu[${accountId}]: vc invited event missing meeting_no or inviter identity, skipping`)
+    return
+  }
+
+  const account = getLarkAccount(cfg, accountId)
+  const accountScopedCfg: ClawdbotConfig = {
+    ...cfg,
+    channels: { ...cfg.channels, feishu: account.config },
+  }
+  const ctx = buildSyntheticContext(syntheticEvent)
+
+  log(
+    `feishu[${accountId}]: vc meeting invited, dispatching synthetic inbound` +
+      ` sender=${syntheticEvent.senderId} meeting_no=${syntheticEvent.meetingNo}`,
+  )
+
+  try {
+    await dispatchToAgent({
+      ctx,
+      permissionError: undefined,
+      mediaPayload: {},
+      extraInboundFields: {
+        SyntheticEventType: syntheticEvent.eventType,
+        VcMeetingId: syntheticEvent.meetingId,
+        VcMeetingNo: syntheticEvent.meetingNo,
+        VcMeetingTopic: syntheticEvent.topic,
+        VcInviterOpenId: syntheticEvent.senderOpenId,
+        VcInviteTime: syntheticEvent.inviteTime,
+      },
+      quotedContent: undefined,
+      account,
+      accountScopedCfg,
+      runtime,
+      chatHistories,
+      historyLimit: 0,
+      // VC events do not originate from a real IM message.
+      replyToMessageId: undefined,
+      commandAuthorized: false,
+      skipTyping: true,
+    })
+  } catch (err) {
+    error(`feishu[${accountId}]: error dispatching vc invited synthetic inbound: ${String(err)}`)
+  }
+}

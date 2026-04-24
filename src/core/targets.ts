@@ -153,7 +153,10 @@ export function formatFeishuTarget(id: string, type?: FeishuIdType): string {
 export function resolveReceiveIdType(id: string): 'chat_id' | 'open_id' | 'user_id' {
   if (id.startsWith(CHAT_PREFIX)) return 'chat_id';
   if (id.startsWith(OPEN_ID_PREFIX)) return 'open_id';
-  // Default to open_id for any other pattern (safer for outbound API calls).
+  // Plain alphanumeric (no prefix) is treated as tenant user_id.
+  // This matches detectIdType() above and the outbound send docs ("open_id, or user_id").
+  if (/^[a-zA-Z0-9]+$/.test(id)) return 'user_id';
+  // Fallback to open_id for unknown patterns.
   return 'open_id';
 }
 
