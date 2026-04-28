@@ -173,10 +173,11 @@ async function dispatchSyntheticMessage(
           }
         }
 
-        // Intentionally drop — synthetic targets have no real chat peer.
-        dc.log(
-          `feishu[${dc.account.accountId}]: synthetic payload dropped (target=${dc.ctx.chatId}, kind=${info.kind}, preview="${preview}")`,
-        );
+        if (info.kind === 'final') {
+          dc.log(
+            `feishu[${dc.account.accountId}]: synthetic final payload dropped (target=${dc.ctx.chatId})`,
+          );
+        }
       },
       onSkip: (_payload, info) => {
         if (info.reason !== 'silent') {

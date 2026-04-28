@@ -51,7 +51,7 @@ function pickId(value?: string | null): string | undefined {
  * event. See {@link ResolvedVcSender} for the field contract.
  *
  * Sender resolution order (first non-empty wins):
- *   1. inviter.id.open_id → union_id → user_id
+ *   1. inviter.id.open_id → user_id → union_id
  *   2. empty string + fromFallback='none'
  */
 export function resolveVcSender(
@@ -67,8 +67,8 @@ export function resolveVcSender(
   let senderId = ''
   let fromFallback: VcSenderFallback = 'none'
 
-  if (inviterOpenId ?? inviterUnionId ?? inviterUserId) {
-    senderId = inviterOpenId ?? inviterUnionId ?? inviterUserId ?? ''
+  if (inviterOpenId ?? inviterUserId ?? inviterUnionId) {
+    senderId = inviterOpenId ?? inviterUserId ?? inviterUnionId ?? ''
     fromFallback = 'inviter'
   }
 

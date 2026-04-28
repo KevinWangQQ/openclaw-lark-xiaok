@@ -255,17 +255,6 @@ export async function handleVcMeetingInvitedEvent(ctx: MonitorContext, data: unk
   if (!isEventOwnershipValid(ctx, data)) return;
   const { accountId, log, error } = ctx;
   try {
-    // Raw payload log — helps diagnose schema drift (e.g. missing inviter /
-    // renamed fields). Output is JSON-stringified with a length cap to avoid
-    // log flooding; serialisation failures are logged but do not interrupt.
-    try {
-      const raw = JSON.stringify(data);
-      const preview = raw.length > 4000 ? `${raw.slice(0, 4000)}...<truncated ${raw.length - 4000} chars>` : raw;
-      log(`feishu[${accountId}]: vc invited event raw payload: ${preview}`);
-    } catch (serErr) {
-      log(`feishu[${accountId}]: vc invited event raw payload serialize failed: ${String(serErr)}`);
-    }
-
     const event = data as FeishuVcMeetingInvitedEvent;
     const meetingNo = event.meeting?.meeting_no?.trim() ?? '';
     const eventId = event.event_id?.trim() ?? '';
@@ -291,8 +280,8 @@ export async function handleVcMeetingInvitedEvent(ctx: MonitorContext, data: unk
         `${invitedBotOpenId ? ` bot_open_id=${invitedBotOpenId}` : ' bot_open_id=<missing>'}` +
         `${ctx.lark.botOpenId ? ` expected_bot_open_id=${ctx.lark.botOpenId}` : ''}` +
         `${event.invite_time ? ` invite_time=${event.invite_time}` : ''}` +
-        ` meeting_no=${meetingNo || '<missing>'}` +
-        ` sender_id=${senderId || '<missing>'}` +
+        ` meeting_no_present=${meetingNo ? 'true' : 'false'}` +
+        ` sender_present=${senderId ? 'true' : 'false'}` +
         ` sender_from=${sender.fromFallback}`,
     );
 
@@ -321,11 +310,11 @@ export async function handleVcMeetingInvitedEvent(ctx: MonitorContext, data: unk
     const dedupBotKey = ctx.lark.botOpenId ?? invitedBotOpenId ?? 'no-bot';
     const dedupKey = eventId ? `vc-invited:event:${eventId}` : `vc-invited:${meetingNo}:${dedupBotKey}`;
     if (!ctx.messageDedup.tryRecord(dedupKey, accountId)) {
-      log(`feishu[${accountId}]: duplicate vc invited event ${dedupKey}, skipping`);
+      log(`feishu[${accountId}]: duplicate vc invited event detected, skipping`);
       return;
     }
 
-    log(`feishu[${accountId}]: vc invited event for meeting ${meetingNo} by ${senderId || '<unknown>'}`);
+    log(`feishu[${accountId}]: vc invited event accepted for synthetic dispatch`);
 
     await handleFeishuVcMeetingInvited({
       cfg: ctx.cfg,

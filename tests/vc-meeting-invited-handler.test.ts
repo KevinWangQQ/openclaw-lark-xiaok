@@ -76,6 +76,54 @@ describe('handleFeishuVcMeetingInvited', () => {
     )
   })
 
+  it('prefers inviter user_id over union_id when open_id is absent', async () => {
+    await handleFeishuVcMeetingInvited({
+      cfg: {} as never,
+      event: {
+        meeting: { meeting_no: '123456789', topic: '周会' },
+        inviter: {
+          id: { user_id: 'u_inviter_1', union_id: 'on_inviter_1' },
+          user_name: 'Alice',
+        },
+        invite_time: '1712345678',
+      },
+      accountId: 'default',
+    })
+
+    expect(dispatchToAgentMock).toHaveBeenCalledTimes(1)
+    expect(dispatchToAgentMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ctx: expect.objectContaining({
+          senderId: 'u_inviter_1',
+        }),
+      }),
+    )
+  })
+
+  it('falls back to inviter union_id when open_id and user_id are absent', async () => {
+    await handleFeishuVcMeetingInvited({
+      cfg: {} as never,
+      event: {
+        meeting: { meeting_no: '123456789', topic: '周会' },
+        inviter: {
+          id: { union_id: 'on_inviter_1' },
+          user_name: 'Alice',
+        },
+        invite_time: '1712345678',
+      },
+      accountId: 'default',
+    })
+
+    expect(dispatchToAgentMock).toHaveBeenCalledTimes(1)
+    expect(dispatchToAgentMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ctx: expect.objectContaining({
+          senderId: 'on_inviter_1',
+        }),
+      }),
+    )
+  })
+
   it('skips dispatch when inviter ids are missing', async () => {
     await handleFeishuVcMeetingInvited({
       cfg: {} as never,
