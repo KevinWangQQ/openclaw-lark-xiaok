@@ -33,7 +33,7 @@ import { clearToolUseTraceRun, startToolUseTraceRun } from '../../card/tool-use-
 import { isLikelyAbortText } from '../../channel/abort-detect';
 import { isThreadCapableGroup } from '../../core/chat-info-cache';
 import { isCommentTarget } from '../../core/comment-target';
-import { isSyntheticTarget, SYNTHETIC_VC_CHAT_ID } from '../../core/synthetic-target';
+import { SYNTHETIC_VC_CHAT_ID, isSyntheticTarget } from '../../core/synthetic-target';
 import { encodeFeishuRouteTarget } from '../../core/targets';
 import type { LarkClient } from '../../core/lark-client';
 import { sendCommentReplyLark } from '../outbound/deliver';
