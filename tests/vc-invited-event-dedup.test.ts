@@ -99,7 +99,7 @@ describe('handleVcMeetingInvitedEvent dedup', () => {
     })
 
     expect(errorMock).not.toHaveBeenCalled()
-    expect(tryRecordMock).toHaveBeenCalledWith('vc-invited:event:evt_vc_123', 'default')
+    expect(tryRecordMock).toHaveBeenCalledWith('vc-invited:by-event:evt_vc_123', 'default')
     expect(handleFeishuVcMeetingInvitedMock).toHaveBeenCalledTimes(1)
   })
 
@@ -113,7 +113,7 @@ describe('handleVcMeetingInvitedEvent dedup', () => {
     })
 
     expect(errorMock).not.toHaveBeenCalled()
-    expect(tryRecordMock).toHaveBeenCalledWith('vc-invited:123456789:ou_ctx_bot', 'default')
+    expect(tryRecordMock).toHaveBeenCalledWith('vc-invited:by-meeting:123456789:ou_ctx_bot', 'default')
     expect(handleFeishuVcMeetingInvitedMock).toHaveBeenCalledTimes(1)
   })
 })

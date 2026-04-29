@@ -25,6 +25,9 @@ export const SYNTHETIC_VC_CHAT_ID = 'synthetic:vc-invited';
  * 'p2p' is the closest match (single-peer, non-group) and the outbound
  * short-circuit gates on the sentinel chatId — not the chatType — so this
  * choice does not produce any DMs on its own.
+ *
+ * TODO(synthetic-target): widen MessageContext.chatType to include
+ * `synthetic` once downstream signatures are audited.
  */
 export const SYNTHETIC_VC_CHAT_TYPE = 'p2p' as const;
 

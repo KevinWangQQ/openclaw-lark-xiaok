@@ -56,7 +56,6 @@ function pickId(value?: string | null): string | undefined {
  */
 export function resolveVcSender(
   event: FeishuVcMeetingInvitedEvent,
-  _botOpenIdFallback?: string,
 ): ResolvedVcSender {
   const inviterId = event.inviter?.id
 

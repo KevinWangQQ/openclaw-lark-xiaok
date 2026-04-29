@@ -42,6 +42,7 @@ describe('handleFeishuVcMeetingInvited', () => {
     await handleFeishuVcMeetingInvited({
       cfg: {} as never,
       event: {
+        event_id: 'evt_vc_123',
         meeting: { id: '6911188411934433028', meeting_no: '123456789', topic: '周会' },
         inviter: { id: { open_id: 'ou_inviter_1' }, user_name: 'Alice' },
         invite_time: '1712345678',
@@ -56,6 +57,7 @@ describe('handleFeishuVcMeetingInvited', () => {
           // chatId is a sentinel, NOT the inviter open_id — this prevents
           // downstream IM paths from sending DMs to the inviter.
           chatId: SYNTHETIC_VC_CHAT_ID,
+          messageId: 'vc-invited:event:evt_vc_123',
           senderId: 'ou_inviter_1',
           chatType: 'p2p',
           content: 'Join the meeting with meeting number 123456789.',
@@ -72,6 +74,27 @@ describe('handleFeishuVcMeetingInvited', () => {
         }),
         replyToMessageId: undefined,
         skipTyping: true,
+      }),
+    )
+  })
+
+  it('falls back to meeting number plus invite time when event_id is absent', async () => {
+    await handleFeishuVcMeetingInvited({
+      cfg: {} as never,
+      event: {
+        meeting: { id: '6911188411934433028', meeting_no: '123456789', topic: '周会' },
+        inviter: { id: { open_id: 'ou_inviter_1' }, user_name: 'Alice' },
+        invite_time: '1712345678',
+      },
+      accountId: 'default',
+    })
+
+    expect(dispatchToAgentMock).toHaveBeenCalledTimes(1)
+    expect(dispatchToAgentMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ctx: expect.objectContaining({
+          messageId: 'vc-invited:123456789:1712345678',
+        }),
       }),
     )
   })
@@ -159,7 +182,6 @@ describe('handleFeishuVcMeetingInvited', () => {
         meeting: { meeting_no: '123456789' },
         invite_time: '1712345678',
       },
-      botOpenId: 'ou_ctx_bot',
       accountId: 'default',
     })
 

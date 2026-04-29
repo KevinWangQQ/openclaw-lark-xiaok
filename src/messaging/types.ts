@@ -184,6 +184,7 @@ export interface FeishuVcMeetingInvitedEvent {
 export interface VcMeetingInvitedSyntheticEvent {
   eventType: 'vc.bot.meeting_invited_v1';
   source: 'feishu-vc-event';
+  eventId?: string;
   meetingId?: string;
   meetingNo: string;
   topic?: string;

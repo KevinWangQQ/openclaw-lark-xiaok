@@ -261,7 +261,7 @@ export async function handleVcMeetingInvitedEvent(ctx: MonitorContext, data: unk
     // Resolve the inviter identity through the shared helper so the
     // diagnostics log and the dispatch handler always agree on the
     // same sender semantics.
-    const sender = resolveVcSender(event, ctx.lark.botOpenId);
+    const sender = resolveVcSender(event);
     const senderId = sender.senderId;
     const invitedBotOpenId = event.bot?.id?.open_id?.trim() ?? '';
 
@@ -308,7 +308,9 @@ export async function handleVcMeetingInvitedEvent(ctx: MonitorContext, data: unk
     // Fallback to (meeting_no, bot) only when event_id is absent so older
     // payload shapes still remain deduplicated.
     const dedupBotKey = ctx.lark.botOpenId ?? invitedBotOpenId ?? 'no-bot';
-    const dedupKey = eventId ? `vc-invited:event:${eventId}` : `vc-invited:${meetingNo}:${dedupBotKey}`;
+    const dedupKey = eventId
+      ? `vc-invited:by-event:${eventId}`
+      : `vc-invited:by-meeting:${meetingNo}:${dedupBotKey}`;
     if (!ctx.messageDedup.tryRecord(dedupKey, accountId)) {
       log(`feishu[${accountId}]: duplicate vc invited event detected, skipping`);
       return;
@@ -320,7 +322,6 @@ export async function handleVcMeetingInvitedEvent(ctx: MonitorContext, data: unk
       cfg: ctx.cfg,
       event,
       runtime: ctx.runtime,
-      botOpenId: ctx.lark.botOpenId,
       chatHistories: ctx.chatHistories,
       accountId,
     });

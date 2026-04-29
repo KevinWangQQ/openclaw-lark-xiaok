@@ -23,7 +23,6 @@ const logger = larkLogger('inbound/vc-meeting-invited-handler')
 
 function buildSyntheticEvent(
   event: FeishuVcMeetingInvitedEvent,
-  botOpenId?: string,
 ): VcMeetingInvitedSyntheticEvent | null {
   const meetingNo = event.meeting?.meeting_no?.trim() ?? ''
 
@@ -32,7 +31,7 @@ function buildSyntheticEvent(
     return null
   }
 
-  const sender = resolveVcSender(event, botOpenId)
+  const sender = resolveVcSender(event)
   if (!sender.senderId) {
     return null
   }
@@ -40,6 +39,7 @@ function buildSyntheticEvent(
   return {
     eventType: 'vc.bot.meeting_invited_v1',
     source: 'feishu-vc-event',
+    eventId: event.event_id?.trim() || undefined,
     meetingId: event.meeting?.id?.trim() || undefined,
     meetingNo,
     topic: event.meeting?.topic?.trim() || undefined,
@@ -53,8 +53,15 @@ function buildSyntheticEvent(
 }
 
 function buildSyntheticContext(event: VcMeetingInvitedSyntheticEvent): MessageContext {
+  // Keep the synthetic inbound prompt in English for now: it is an
+  // agent-facing intent string rather than user-visible copy, and the final
+  // reply language is still governed by the agent/session prompt stack.
+  // If we later need locale-aware synthetic prompts, this is the single place
+  // to introduce a template or config-based language switch.
   const syntheticText = `Join the meeting with meeting number ${event.meetingNo}.`
-  const syntheticMessageId = `vc-invited:${event.meetingNo}:${event.inviteTime ?? crypto.randomUUID()}`
+  const syntheticMessageId = event.eventId
+    ? `vc-invited:event:${event.eventId}`
+    : `vc-invited:${event.meetingNo}:${event.inviteTime ?? crypto.randomUUID()}`
 
   // VC-invited events have no real chat/thread — they are service-to-service
   // triggers. Using the inviter's open_id as chatId would cause downstream
@@ -95,15 +102,14 @@ export async function handleFeishuVcMeetingInvited(params: {
   cfg: ClawdbotConfig
   event: FeishuVcMeetingInvitedEvent
   runtime?: RuntimeEnv
-  botOpenId?: string
   chatHistories?: Map<string, HistoryEntry[]>
   accountId?: string
 }): Promise<void> {
-  const { cfg, event, runtime, botOpenId, chatHistories, accountId } = params
+  const { cfg, event, runtime, chatHistories, accountId } = params
   const log = runtime?.log ?? ((...args: unknown[]) => logger.info(args.map(String).join(' ')))
   const error = runtime?.error ?? ((...args: unknown[]) => logger.error(args.map(String).join(' ')))
 
-  const syntheticEvent = buildSyntheticEvent(event, botOpenId)
+  const syntheticEvent = buildSyntheticEvent(event)
   if (!syntheticEvent) {
     log(`feishu[${accountId}]: vc invited event missing meeting_no or inviter identity, skipping`)
     return
