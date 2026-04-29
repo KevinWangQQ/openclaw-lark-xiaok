@@ -88,10 +88,6 @@ describe('handleFeishuVcMeetingInvited', () => {
           VcInviterOpenId: 'ou_inviter_1',
           VcInviteTime: '1712345678',
         }),
-        sessionPeerOverride: {
-          kind: 'channel',
-          id: 'vc-meeting-default-123456789',
-        },
         replyToMessageId: undefined,
         skipTyping: true,
       }),
@@ -117,34 +113,6 @@ describe('handleFeishuVcMeetingInvited', () => {
         ctx: expect.objectContaining({
           messageId: 'vc-invited:123456789:1712345678',
         }),
-        sessionPeerOverride: {
-          kind: 'channel',
-          id: 'vc-meeting-default-123456789',
-        },
-      }),
-    )
-  })
-
-  it('uses meeting number for session override when meetingId is absent', async () => {
-    readFeishuAllowFromStoreMock.mockResolvedValueOnce(['ou_inviter_1'])
-
-    await handleFeishuVcMeetingInvited({
-      cfg: {} as never,
-      event: {
-        meeting: { meeting_no: '123456789', topic: '周会' },
-        inviter: { id: { open_id: 'ou_inviter_1' }, user_name: 'Alice' },
-        invite_time: '1712345678',
-      },
-      accountId: 'default',
-    })
-
-    expect(dispatchToAgentMock).toHaveBeenCalledTimes(1)
-    expect(dispatchToAgentMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sessionPeerOverride: {
-          kind: 'channel',
-          id: 'vc-meeting-default-123456789',
-        },
       }),
     )
   })

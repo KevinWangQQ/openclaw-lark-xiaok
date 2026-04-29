@@ -257,32 +257,4 @@ describe('dispatchToAgent tool_use trace initialization', () => {
     });
   });
 
-  it('uses sessionPeerOverride to build a meeting-scoped session key', async () => {
-    const dc = createDispatchContext();
-
-    await dispatchToAgent({
-      ctx: dc.ctx as never,
-      mediaPayload: {},
-      sessionPeerOverride: {
-        kind: 'channel',
-        id: 'vc-meeting-default-123456789',
-      },
-      account: dc.account as never,
-      accountScopedCfg: {} as never,
-      historyLimit: 0,
-    });
-
-    const buildInboundPayloadArgs = buildInboundPayloadMock.mock.calls[0] as unknown as [
-      unknown,
-      { sessionKeyOverride?: string },
-    ];
-    expect(buildInboundPayloadArgs[1]).toMatchObject({
-      sessionKeyOverride: 'agent:default:feishu:channel:vc-meeting-default-123456789',
-    });
-    expect(createFeishuReplyDispatcherMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sessionKey: 'agent:default:feishu:channel:vc-meeting-default-123456789',
-      }),
-    );
-  });
 });

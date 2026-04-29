@@ -101,24 +101,6 @@ function buildSyntheticContext(event: VcMeetingInvitedSyntheticEvent): MessageCo
   }
 }
 
-function buildVcMeetingSessionPeer(params: {
-  accountId: string
-  meetingNo: string
-}): { kind: 'channel'; id: string } {
-  return {
-    kind: 'channel',
-    // Session isolation is meeting-scoped by meeting number, not inviter and
-    // not runtime-wide dmScope. We intentionally do not use meetingId here:
-    // meetingNo is the user-facing stable identifier in the invite event and
-    // matches the synthetic inbound prompt content.
-    //
-    // This only affects the OpenClaw agent/session bucket. It does NOT change
-    // the Feishu transport target for follow-up notifications; final user-
-    // visible IM messages are still explicitly DM'ed to the inviter elsewhere.
-    id: `vc-meeting-${params.accountId}-${params.meetingNo}`,
-  }
-}
-
 function matchesAnySenderId(params: {
   allowFrom: Array<string | number>
   senderIds: Array<string | undefined>
@@ -155,10 +137,6 @@ export async function handleFeishuVcMeetingInvited(params: {
     channels: { ...cfg.channels, feishu: account.config },
   }
   const accountFeishuCfg = account.config
-  const sessionPeerOverride = buildVcMeetingSessionPeer({
-    accountId: account.accountId,
-    meetingNo: syntheticEvent.meetingNo,
-  })
 
   // ---- Access policy enforcement (DM-style) ----
   // VC invited events are user-triggered service events. Align their access
@@ -228,7 +206,6 @@ export async function handleFeishuVcMeetingInvited(params: {
         VcInviterOpenId: syntheticEvent.senderOpenId,
         VcInviteTime: syntheticEvent.inviteTime,
       },
-      sessionPeerOverride,
       quotedContent: undefined,
       account,
       accountScopedCfg,
