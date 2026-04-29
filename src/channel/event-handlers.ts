@@ -308,9 +308,7 @@ export async function handleVcMeetingInvitedEvent(ctx: MonitorContext, data: unk
     // Fallback to (meeting_no, bot) only when event_id is absent so older
     // payload shapes still remain deduplicated.
     const dedupBotKey = ctx.lark.botOpenId ?? invitedBotOpenId ?? 'no-bot';
-    const dedupKey = eventId
-      ? `vc-invited:by-event:${eventId}`
-      : `vc-invited:by-meeting:${meetingNo}:${dedupBotKey}`;
+    const dedupKey = eventId ? `vc-invited:by-event:${eventId}` : `vc-invited:by-meeting:${meetingNo}:${dedupBotKey}`;
     if (!ctx.messageDedup.tryRecord(dedupKey, accountId)) {
       log(`feishu[${accountId}]: duplicate vc invited event detected, skipping`);
       return;
