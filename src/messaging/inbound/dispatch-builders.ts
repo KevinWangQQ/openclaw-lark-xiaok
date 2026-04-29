@@ -117,6 +117,7 @@ export function buildInboundPayload(
     replyToBody?: string;
     inboundHistory?: { sender: string; body: string; timestamp: number }[];
     extraFields?: Record<string, unknown>;
+    sessionKeyOverride?: string;
   },
 ): ReturnType<typeof LarkClient.runtime.channel.reply.finalizeInboundContext> {
   return dc.core.channel.reply.finalizeInboundContext({
@@ -128,7 +129,7 @@ export function buildInboundPayload(
     CommandBody: opts.commandBody,
     From: dc.feishuFrom,
     To: dc.feishuTo,
-    SessionKey: dc.threadSessionKey ?? dc.route.sessionKey,
+    SessionKey: opts.sessionKeyOverride ?? dc.threadSessionKey ?? dc.route.sessionKey,
     AccountId: dc.route.accountId,
     ChatType: dc.isGroup ? 'group' : 'direct',
     GroupSubject: dc.isGroup ? dc.ctx.chatId : undefined,

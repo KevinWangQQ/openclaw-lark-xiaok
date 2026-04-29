@@ -17,6 +17,9 @@ import { SYNTHETIC_VC_CHAT_ID, SYNTHETIC_VC_CHAT_TYPE } from '../../core/synthet
 import { getLarkAccount } from '../../core/accounts'
 import { larkLogger } from '../../core/lark-logger'
 import { dispatchToAgent } from './dispatch'
+import { sendPairingReply } from './gate-effects'
+import { readFeishuAllowFromStore } from './gate'
+import { resolveFeishuAllowlistMatch } from './policy'
 import { resolveVcSender } from './vc-sender'
 
 const logger = larkLogger('inbound/vc-meeting-invited-handler')
@@ -98,6 +101,37 @@ function buildSyntheticContext(event: VcMeetingInvitedSyntheticEvent): MessageCo
   }
 }
 
+function buildVcMeetingSessionPeer(params: {
+  accountId: string
+  meetingNo: string
+}): { kind: 'channel'; id: string } {
+  return {
+    kind: 'channel',
+    // Session isolation is meeting-scoped by meeting number, not inviter and
+    // not runtime-wide dmScope. We intentionally do not use meetingId here:
+    // meetingNo is the user-facing stable identifier in the invite event and
+    // matches the synthetic inbound prompt content.
+    //
+    // This only affects the OpenClaw agent/session bucket. It does NOT change
+    // the Feishu transport target for follow-up notifications; final user-
+    // visible IM messages are still explicitly DM'ed to the inviter elsewhere.
+    id: `vc-meeting-${params.accountId}-${params.meetingNo}`,
+  }
+}
+
+function matchesAnySenderId(params: {
+  allowFrom: Array<string | number>
+  senderIds: Array<string | undefined>
+}): boolean {
+  const candidates = [...new Set(params.senderIds.map((id) => id?.trim()).filter(Boolean) as string[])]
+  return candidates.some((candidate) =>
+    resolveFeishuAllowlistMatch({
+      allowFrom: params.allowFrom,
+      senderId: candidate,
+    }).allowed,
+  )
+}
+
 export async function handleFeishuVcMeetingInvited(params: {
   cfg: ClawdbotConfig
   event: FeishuVcMeetingInvitedEvent
@@ -120,6 +154,60 @@ export async function handleFeishuVcMeetingInvited(params: {
     ...cfg,
     channels: { ...cfg.channels, feishu: account.config },
   }
+  const accountFeishuCfg = account.config
+  const sessionPeerOverride = buildVcMeetingSessionPeer({
+    accountId: account.accountId,
+    meetingNo: syntheticEvent.meetingNo,
+  })
+
+  // ---- Access policy enforcement (DM-style) ----
+  // VC invited events are user-triggered service events. Align their access
+  // semantics with direct-message/comment flows so unpaired users cannot
+  // trigger agent behavior through event ingress.
+  const dmPolicy = accountFeishuCfg?.dmPolicy ?? 'pairing'
+  if (dmPolicy === 'disabled') {
+    log(`feishu[${accountId}]: vc invited event rejected (dmPolicy=disabled)`)
+    return
+  }
+
+  if (dmPolicy !== 'open') {
+    const configAllowFrom = accountFeishuCfg?.allowFrom ?? []
+    const storeAllowFrom = await readFeishuAllowFromStore(account.accountId).catch(() => [] as string[])
+    const combinedAllowFrom = [...configAllowFrom, ...storeAllowFrom]
+
+    const allowed = matchesAnySenderId({
+      allowFrom: combinedAllowFrom,
+      senderIds: [
+        syntheticEvent.senderOpenId,
+        syntheticEvent.senderUserId,
+        syntheticEvent.senderUnionId,
+      ],
+    })
+
+    if (!allowed) {
+      if (dmPolicy === 'pairing') {
+        if (syntheticEvent.senderOpenId) {
+          log(`feishu[${accountId}]: vc inviter not paired, creating pairing request`)
+          try {
+            await sendPairingReply({
+              senderId: syntheticEvent.senderOpenId,
+              chatId: syntheticEvent.senderOpenId,
+              accountId: account.accountId,
+              accountScopedCfg,
+            })
+          } catch (pairingErr) {
+            log(`feishu[${accountId}]: failed to create pairing request for vc inviter: ${String(pairingErr)}`)
+          }
+        } else {
+          log(`feishu[${accountId}]: vc inviter not paired and has no open_id for pairing reply, rejecting`)
+        }
+      } else {
+        log(`feishu[${accountId}]: vc invited event rejected (dmPolicy=${dmPolicy}, inviter not in allowlist)`)
+      }
+      return
+    }
+  }
+
   const ctx = buildSyntheticContext(syntheticEvent)
 
   log(
@@ -140,6 +228,7 @@ export async function handleFeishuVcMeetingInvited(params: {
         VcInviterOpenId: syntheticEvent.senderOpenId,
         VcInviteTime: syntheticEvent.inviteTime,
       },
+      sessionPeerOverride,
       quotedContent: undefined,
       account,
       accountScopedCfg,

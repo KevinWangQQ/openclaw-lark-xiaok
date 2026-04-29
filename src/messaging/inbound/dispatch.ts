@@ -15,6 +15,8 @@
  */
 
 import type { ClawdbotConfig, RuntimeEnv  } from 'openclaw/plugin-sdk';
+import type { RoutePeer } from 'openclaw/plugin-sdk/routing';
+import { buildAgentSessionKey } from 'openclaw/plugin-sdk/routing';
 import type { HistoryEntry } from 'openclaw/plugin-sdk/reply-history';
 import { clearHistoryEntriesIfEnabled } from 'openclaw/plugin-sdk/reply-history';
 import type { MessageContext } from '../types';
@@ -119,6 +121,23 @@ async function dispatchCommentMessage(
   log.info(`comment dispatch complete (delivered=${delivered}, elapsed=${ticketElapsed()}ms)`);
 }
 
+function resolveSessionKeyOverride(
+  dc: DispatchContext,
+  sessionPeerOverride?: RoutePeer,
+): string | undefined {
+  const normalizedPeerId = sessionPeerOverride?.id?.trim();
+  if (!sessionPeerOverride || !normalizedPeerId) return undefined;
+
+  return buildAgentSessionKey({
+    agentId: dc.route.agentId,
+    channel: dc.route.channel,
+    accountId: dc.route.accountId,
+    peer: { kind: sessionPeerOverride.kind, id: normalizedPeerId },
+    dmScope: dc.accountScopedCfg.session?.dmScope,
+    identityLinks: dc.accountScopedCfg.session?.identityLinks,
+  });
+}
+
 /**
  * Dispatch a synthetic-target message via the buffered block dispatcher
  * while discarding every delivered payload.
@@ -131,9 +150,10 @@ async function dispatchCommentMessage(
 async function dispatchSyntheticMessage(
   dc: DispatchContext,
   ctxPayload: ReturnType<typeof LarkClient.runtime.channel.reply.finalizeInboundContext>,
+  sessionKeyOverride?: string,
   skillFilter?: string[],
 ): Promise<void> {
-  const effectiveSessionKey = dc.threadSessionKey ?? dc.route.sessionKey;
+  const effectiveSessionKey = sessionKeyOverride ?? dc.threadSessionKey ?? dc.route.sessionKey;
   const isVcSynthetic = dc.ctx.chatId === SYNTHETIC_VC_CHAT_ID;
   let deliveredFinalToSender = false;
   dc.log(
@@ -152,6 +172,11 @@ async function dispatchSyntheticMessage(
         // VC invited flows intentionally keep the synthetic target to avoid
         // leaking intermediate tool output to IM, but the final business
         // result should be explicitly notified to the inviter.
+        //
+        // Important: this DM is only a transport bridge for the final text.
+        // It does not rebind the inviter's DM conversation to the synthetic
+        // meeting-scoped session; later DM replies will still be routed by the
+        // normal OpenClaw DM session rules.
         if (isVcSynthetic && info.kind === 'final' && text && text !== 'NO_REPLY' && !deliveredFinalToSender) {
           deliveredFinalToSender = true;
           try {
@@ -205,13 +230,14 @@ async function dispatchNormalMessage(
   replyToMessageId?: string,
   skillFilter?: string[],
   skipTyping?: boolean,
+  sessionKeyOverride?: string,
 ): Promise<void> {
   // Synthetic targets (e.g. VC meeting-invited) have no real IM peer to
   // deliver replies to. Route them through the buffered block dispatcher
   // with a deliver() that drops every payload — the agent still runs
   // (tool calls, side-effects) but produces no outbound IM traffic.
   if (isSyntheticTarget(dc.ctx.chatId)) {
-    await dispatchSyntheticMessage(dc, ctxPayload, skillFilter);
+    await dispatchSyntheticMessage(dc, ctxPayload, sessionKeyOverride, skillFilter);
     return;
   }
 
@@ -232,7 +258,7 @@ async function dispatchNormalMessage(
     return;
   }
 
-  const effectiveSessionKey = dc.threadSessionKey ?? dc.route.sessionKey;
+  const effectiveSessionKey = sessionKeyOverride ?? dc.threadSessionKey ?? dc.route.sessionKey;
   const toolUseDisplay = resolveToolUseDisplayConfig({
     cfg: dc.accountScopedCfg,
     feishuCfg: dc.account.config,
@@ -320,6 +346,8 @@ export async function dispatchToAgent(params: {
   mediaPayload: Record<string, unknown>;
   /** Additional structured metadata for synthetic or event-driven inbound flows. */
   extraInboundFields?: Record<string, unknown>;
+  /** Optional peer override used only for deriving the session key. */
+  sessionPeerOverride?: RoutePeer;
   quotedContent?: string;
   account: LarkAccount;
   /** account 级别的 ClawdbotConfig（channels.feishu 已替换为 per-account 合并后的配置） */
@@ -344,6 +372,7 @@ export async function dispatchToAgent(params: {
 }): Promise<void> {
   // 1. Derive shared context (including route resolution + system event)
   const dc = buildDispatchContext(params);
+  const sessionKeyOverride = resolveSessionKeyOverride(dc, params.sessionPeerOverride);
 
   // 1a. Thread detection fallback for topic groups.
   //     In topic groups (chat_mode=topic), reply events may carry root_id
@@ -448,6 +477,7 @@ export async function dispatchToAgent(params: {
         })),
     replyToBody: params.quotedContent,
     inboundHistory,
+    sessionKeyOverride,
     extraFields: {
       ...params.mediaPayload,
       ...(params.extraInboundFields ?? {}),
@@ -551,6 +581,7 @@ export async function dispatchToAgent(params: {
       params.replyToMessageId,
       skillFilter,
       params.skipTyping,
+      sessionKeyOverride,
     );
   }
 }

@@ -3,9 +3,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const {
   dispatchToAgentMock,
   getLarkAccountMock,
+  readFeishuAllowFromStoreMock,
+  sendPairingReplyMock,
 } = vi.hoisted(() => ({
   dispatchToAgentMock: vi.fn(),
   getLarkAccountMock: vi.fn(),
+  readFeishuAllowFromStoreMock: vi.fn(),
+  sendPairingReplyMock: vi.fn(),
 }))
 
 vi.mock('../src/messaging/inbound/dispatch', () => ({
@@ -14,6 +18,14 @@ vi.mock('../src/messaging/inbound/dispatch', () => ({
 
 vi.mock('../src/core/accounts', () => ({
   getLarkAccount: getLarkAccountMock,
+}))
+
+vi.mock('../src/messaging/inbound/gate', () => ({
+  readFeishuAllowFromStore: readFeishuAllowFromStoreMock,
+}))
+
+vi.mock('../src/messaging/inbound/gate-effects', () => ({
+  sendPairingReply: sendPairingReplyMock,
 }))
 
 vi.mock('../src/core/lark-logger', () => ({
@@ -31,14 +43,18 @@ beforeEach(() => {
     enabled: true,
     configured: true,
     brand: 'feishu',
-    config: {},
+    config: { dmPolicy: 'pairing' },
     appId: 'cli_xxx',
     appSecret: 'secret',
   })
+  readFeishuAllowFromStoreMock.mockResolvedValue([])
+  sendPairingReplyMock.mockResolvedValue(undefined)
 })
 
 describe('handleFeishuVcMeetingInvited', () => {
   it('dispatches a synthetic natural-language inbound with synthetic chatId', async () => {
+    readFeishuAllowFromStoreMock.mockResolvedValueOnce(['ou_inviter_1'])
+
     await handleFeishuVcMeetingInvited({
       cfg: {} as never,
       event: {
@@ -72,6 +88,10 @@ describe('handleFeishuVcMeetingInvited', () => {
           VcInviterOpenId: 'ou_inviter_1',
           VcInviteTime: '1712345678',
         }),
+        sessionPeerOverride: {
+          kind: 'channel',
+          id: 'vc-meeting-default-123456789',
+        },
         replyToMessageId: undefined,
         skipTyping: true,
       }),
@@ -79,6 +99,8 @@ describe('handleFeishuVcMeetingInvited', () => {
   })
 
   it('falls back to meeting number plus invite time when event_id is absent', async () => {
+    readFeishuAllowFromStoreMock.mockResolvedValueOnce(['ou_inviter_1'])
+
     await handleFeishuVcMeetingInvited({
       cfg: {} as never,
       event: {
@@ -95,11 +117,41 @@ describe('handleFeishuVcMeetingInvited', () => {
         ctx: expect.objectContaining({
           messageId: 'vc-invited:123456789:1712345678',
         }),
+        sessionPeerOverride: {
+          kind: 'channel',
+          id: 'vc-meeting-default-123456789',
+        },
+      }),
+    )
+  })
+
+  it('uses meeting number for session override when meetingId is absent', async () => {
+    readFeishuAllowFromStoreMock.mockResolvedValueOnce(['ou_inviter_1'])
+
+    await handleFeishuVcMeetingInvited({
+      cfg: {} as never,
+      event: {
+        meeting: { meeting_no: '123456789', topic: '周会' },
+        inviter: { id: { open_id: 'ou_inviter_1' }, user_name: 'Alice' },
+        invite_time: '1712345678',
+      },
+      accountId: 'default',
+    })
+
+    expect(dispatchToAgentMock).toHaveBeenCalledTimes(1)
+    expect(dispatchToAgentMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionPeerOverride: {
+          kind: 'channel',
+          id: 'vc-meeting-default-123456789',
+        },
       }),
     )
   })
 
   it('prefers inviter user_id over union_id when open_id is absent', async () => {
+    readFeishuAllowFromStoreMock.mockResolvedValueOnce(['u_inviter_1'])
+
     await handleFeishuVcMeetingInvited({
       cfg: {} as never,
       event: {
@@ -124,6 +176,8 @@ describe('handleFeishuVcMeetingInvited', () => {
   })
 
   it('falls back to inviter union_id when open_id and user_id are absent', async () => {
+    readFeishuAllowFromStoreMock.mockResolvedValueOnce(['on_inviter_1'])
+
     await handleFeishuVcMeetingInvited({
       cfg: {} as never,
       event: {
@@ -203,5 +257,73 @@ describe('handleFeishuVcMeetingInvited', () => {
     })
 
     expect(dispatchToAgentMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects vc invited events when dmPolicy=disabled', async () => {
+    getLarkAccountMock.mockReturnValueOnce({
+      accountId: 'default',
+      enabled: true,
+      configured: true,
+      brand: 'feishu',
+      config: { dmPolicy: 'disabled' },
+      appId: 'cli_xxx',
+      appSecret: 'secret',
+    })
+
+    await handleFeishuVcMeetingInvited({
+      cfg: {} as never,
+      event: {
+        meeting: { meeting_no: '123456789' },
+        inviter: { id: { open_id: 'ou_inviter_1' }, user_name: 'Alice' },
+      },
+      accountId: 'default',
+    })
+
+    expect(dispatchToAgentMock).not.toHaveBeenCalled()
+    expect(sendPairingReplyMock).not.toHaveBeenCalled()
+  })
+
+  it('creates a pairing request and skips dispatch when inviter is not paired', async () => {
+    await handleFeishuVcMeetingInvited({
+      cfg: {} as never,
+      event: {
+        meeting: { meeting_no: '123456789' },
+        inviter: { id: { open_id: 'ou_inviter_1' }, user_name: 'Alice' },
+      },
+      accountId: 'default',
+    })
+
+    expect(dispatchToAgentMock).not.toHaveBeenCalled()
+    expect(sendPairingReplyMock).toHaveBeenCalledTimes(1)
+    expect(sendPairingReplyMock).toHaveBeenCalledWith({
+      senderId: 'ou_inviter_1',
+      chatId: 'ou_inviter_1',
+      accountId: 'default',
+      accountScopedCfg: expect.any(Object),
+    })
+  })
+
+  it('rejects allowlist mode when inviter is not explicitly allowed', async () => {
+    getLarkAccountMock.mockReturnValueOnce({
+      accountId: 'default',
+      enabled: true,
+      configured: true,
+      brand: 'feishu',
+      config: { dmPolicy: 'allowlist', allowFrom: [] },
+      appId: 'cli_xxx',
+      appSecret: 'secret',
+    })
+
+    await handleFeishuVcMeetingInvited({
+      cfg: {} as never,
+      event: {
+        meeting: { meeting_no: '123456789' },
+        inviter: { id: { open_id: 'ou_inviter_1' }, user_name: 'Alice' },
+      },
+      accountId: 'default',
+    })
+
+    expect(dispatchToAgentMock).not.toHaveBeenCalled()
+    expect(sendPairingReplyMock).not.toHaveBeenCalled()
   })
 })
