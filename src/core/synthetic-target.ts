@@ -12,10 +12,10 @@
  * same pattern used by `core/comment-target.ts` for Drive comment threads.
  */
 
-const SYNTHETIC_PREFIX = 'synthetic:'
+const SYNTHETIC_PREFIX = 'synthetic:';
 
 /** Sentinel chatId for VC `vc.bot.meeting_invited_v1` synthetic inbound. */
-export const SYNTHETIC_VC_CHAT_ID = 'synthetic:vc-invited'
+export const SYNTHETIC_VC_CHAT_ID = 'synthetic:vc-invited';
 
 /**
  * The `chatType` stamped on synthetic VC contexts.
@@ -26,12 +26,12 @@ export const SYNTHETIC_VC_CHAT_ID = 'synthetic:vc-invited'
  * short-circuit gates on the sentinel chatId — not the chatType — so this
  * choice does not produce any DMs on its own.
  */
-export const SYNTHETIC_VC_CHAT_TYPE = 'p2p' as const
+export const SYNTHETIC_VC_CHAT_TYPE = 'p2p' as const;
 
 /**
  * Return `true` when `target` is a synthetic sentinel that outbound
  * deliverers should not try to send an IM message to.
  */
 export function isSyntheticTarget(target: string | undefined | null): boolean {
-  return Boolean(target && target.startsWith(SYNTHETIC_PREFIX))
+  return Boolean(target && target.startsWith(SYNTHETIC_PREFIX));
 }
