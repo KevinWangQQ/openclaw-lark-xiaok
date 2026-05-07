@@ -1,0 +1,8 @@
+[Group chat context · {time}]
+
+Members in this chat (use the <at> tags below when you want to notify them; plain @Name does not notify):
+{members}
+
+Recent messages ({count}):
+{timeline}
+[/Group chat context]
