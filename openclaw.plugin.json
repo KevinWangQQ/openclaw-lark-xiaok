@@ -75,7 +75,78 @@
   "channelConfigs": {
     "feishu": {
       "schema": {
-        "type": "object"
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "spinnerPhrases": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Phrases shown alongside the loading spinner during the pre-answer streaming phase. One is picked at random per turn. Empty or unset → 'Processing...'."
+          },
+          "typingEmoji": {
+            "type": "string",
+            "description": "Reaction emoji used as a typing cue. Single emoji name (e.g. 'Get') or comma-separated pool (e.g. 'Get,DONE,JIAYI'). One is picked at random per turn. Default 'Get'."
+          },
+          "replyInThread": {
+            "oneOf": [
+              { "type": "boolean" },
+              { "type": "string", "enum": ["enabled"] }
+            ],
+            "description": "Force agent replies into a Lark thread for groups. true | 'enabled' enables. Per-group override available via groups[chatId].replyInThread."
+          },
+          "allowBots": {
+            "oneOf": [
+              { "type": "boolean" },
+              { "type": "string", "enum": ["mentions"] }
+            ],
+            "description": "Bot-sender admission policy. true = allow all bots; false = block; 'mentions' = groups require an @-mention of this bot, DMs pass. Default 'mentions'. Per-group override via groups[chatId].allowBots."
+          },
+          "threadSession": {
+            "type": "boolean",
+            "description": "When true, each Lark thread maintains its own agent session, distinct from the parent chat's session."
+          },
+          "groups": {
+            "type": "object",
+            "description": "Per-group overrides keyed by oc_<chatid>. The wildcard key '*' applies to all groups (including those not explicitly listed). Per-group keys override account-level defaults.",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "enabled": { "type": "boolean", "description": "Disable this group entirely when false." },
+                "groupPolicy": { "type": "string", "enum": ["open", "allowlist", "disabled"] },
+                "requireMention": { "type": "boolean" },
+                "respondToMentionAll": { "type": "boolean" },
+                "skills": { "type": "array", "items": { "type": "string" } },
+                "systemPrompt": { "type": "string" },
+                "tools": {
+                  "type": "object",
+                  "properties": {
+                    "allow": { "type": "array", "items": { "type": "string" } },
+                    "deny": { "type": "array", "items": { "type": "string" } }
+                  }
+                },
+                "allowFrom": {
+                  "oneOf": [
+                    { "type": "string" },
+                    { "type": "array", "items": { "type": "string" } }
+                  ]
+                },
+                "allowBots": {
+                  "oneOf": [
+                    { "type": "boolean" },
+                    { "type": "string", "enum": ["mentions"] }
+                  ]
+                },
+                "replyInThread": {
+                  "oneOf": [
+                    { "type": "boolean" },
+                    { "type": "string", "enum": ["enabled"] }
+                  ]
+                }
+              }
+            }
+          }
+        }
       }
     }
   }
