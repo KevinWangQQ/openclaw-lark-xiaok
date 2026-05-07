@@ -13,18 +13,24 @@
       "social": {
         "type": "object",
         "additionalProperties": false,
-        "description": "Configuration for the in-tree feishu-social extension (group context injection, sender awareness, anti-spam). Migrated from the retired feishu-bot-social plugin.",
+        "description": "Optional in-tree feishu-social extension. Adds group-context injection into the agent's system prompt, a sender-name registry consulted as a last-resort name resolver, and a storm-guard that protects against bot-to-bot reply loops. Disabled by default — set `enabled: true` to activate.",
         "properties": {
-          "contextGroups":              { "type": "array",   "items": { "type": "string" }, "description": "List of oc_* chat IDs where group context is injected." },
-          "contextMessageCount":        { "type": "number",  "description": "How many recent messages to fetch per group context build (5-100)." },
+          "enabled":                    { "type": "boolean", "default": false, "description": "Master switch. When false (default), no hooks register and the registry stays unloaded — clean install behaves exactly like upstream openclaw-lark." },
+          "adminDisplayName":           { "type": "string",  "description": "Display name substituted into the {adminName} placeholder in the context template. Default 'the admin'." },
+          "contextTemplate":            { "type": "string",  "description": "Optional override for the system-prompt context block. When unset, a neutral default is used. See examples/social-context-templates/ for shipped variants. Supports placeholders: {time}, {count}, {timeline}, {members}, {groupBots}, {botCount}, {adminName}." },
+          "contextGroups":              { "type": "array",   "items": { "type": "string" }, "description": "List of oc_* chat IDs where group context is injected. Empty list = extension is loaded but injects no context (sender-name lookup still works)." },
+          "contextMessageCount":        { "type": "number",  "description": "How many recent messages to fetch per group context build (5-100). Default 20." },
           "contextCacheTtlMs":          { "type": "number",  "description": "TTL for the per-chat context cache, in ms. Default 60000." },
-          "stormThreshold":             { "type": "number",  "description": "Bot-inbound count within 30s window that trips storm debounce." },
-          "circuitBreakerMaxOutbound":  { "type": "number",  "description": "Outbound count within 60s window that opens the circuit." },
-          "circuitBreakerSilenceMs":    { "type": "number",  "description": "How long the circuit stays open once tripped." },
-          "alertReceiverOpenId":        { "type": "string",  "description": "Admin open_id; storm-detection DM is sent to this user. Skip DM if unset." },
-          "botOverrides":               { "type": "object", "description": "User-supplied bot metadata overrides keyed by agentId." },
-          "debugLog":                   { "type": "boolean", "description": "Enable verbose social-extension log file under ~/.openclaw/feishu-social/logs/." },
-          "wikiBotsPath":               { "type": "string",  "description": "Path to the user-supplied wiki-bots.json. Defaults to ~/.openclaw/feishu-social/wiki-bots.json." }
+          "stormThreshold":             { "type": "number",  "description": "Bot-inbound @-mention count within stormWindowMs that trips the storm debounce. Default 5." },
+          "stormWindowMs":              { "type": "number",  "description": "Window in ms used for the bot-inbound storm threshold. Default 30000." },
+          "circuitBreakerMaxOutbound":  { "type": "number",  "description": "Outbound count within circuitWindowMs that opens the circuit. Default 5." },
+          "circuitWindowMs":            { "type": "number",  "description": "Window in ms used for the outbound circuit-breaker count. Default 60000." },
+          "circuitBreakerSilenceMs":    { "type": "number",  "description": "How long the circuit stays open once tripped, in ms. Default 300000 (5 min)." },
+          "alertReceiverOpenId":        { "type": "string",  "description": "Admin open_id that receives a DM when storm-debounce fires. When unset, no DM is sent (storm guard still drops bot inbound)." },
+          "botOverrides":               { "type": "object",  "description": "User-supplied bot metadata overrides keyed by agentId, merged on top of wiki-bots.json entries." },
+          "debugLog":                   { "type": "boolean", "description": "Enable verbose extension log file. Path determined by logDir. Default true." },
+          "logDir":                     { "type": "string",  "description": "Directory for the extension log file. Defaults to ~/.openclaw/feishu-social/logs/." },
+          "wikiBotsPath":               { "type": "string",  "description": "Path to a user-supplied wiki-bots.json (member + bot registry). Defaults to ~/.openclaw/feishu-social/wiki-bots.json. Schema documented in examples/wiki-bots.example.json." }
         }
       }
     }

@@ -1,33 +1,36 @@
 'use strict';
 
 /**
- * storm-guard.js — Bot 消息循环防护
+ * storm-guard.js — bot reply-loop protection.
  *
- * 防护层级：
- *   L1（规则层）：system prompt 规则④ 禁止 Jarvis 主动发起循环
- *   L2（Debounce）：30s 内 bot @Jarvis ≥ threshold → STORM_DETECTED，暂停 + DM Lucien
- *   L3（熔断）   ：1min 内 outbound ≥ maxOutbound → CIRCUIT_OPEN（静默 silenceMs）
- *   L4（人工豁免）：人类消息永远不受 L2/L3 影响（由 inbound_claim 在判断 isBotSender 后决定）
+ * Layers:
+ *   L1 (debounce)  : N bot-inbound @-mentions inside stormWindowMs trips storm; sends an
+ *                    optional DM to social.alertReceiverOpenId and feeds the circuit.
+ *   L2 (circuit)   : N outbound replies inside circuitWindowMs opens the circuit; the
+ *                    chat goes silent for circuitBreakerSilenceMs.
+ *   L3 (exemption) : human senders never reach this guard; only bot-typed senders are
+ *                    counted (the calling site filters by sender_type before recording).
  */
-
-const STORM_WINDOW_MS   = 30  * 1000;  // 30s debounce 窗口
-const CIRCUIT_WINDOW_MS = 60  * 1000;  // 1min 熔断计数窗口
 
 class StormGuard {
   /**
    * @param {Object} opts
-   * @param {number}   opts.stormThreshold
-   * @param {number}   opts.circuitBreakerMaxOutbound
-   * @param {number}   opts.circuitBreakerSilenceMs
-   * @param {Function} opts.onStormDetected - async (chatId) => void
-   * @param {Object}   opts.logger
+   * @param {number}   [opts.stormThreshold=5]            - bot-inbound mentions inside the storm window that trip the debounce
+   * @param {number}   [opts.stormWindowMs=30000]         - rolling window for bot-inbound counting
+   * @param {number}   [opts.circuitBreakerMaxOutbound=5] - outbound replies inside the circuit window that open the circuit
+   * @param {number}   [opts.circuitWindowMs=60000]       - rolling window for outbound counting
+   * @param {number}   [opts.circuitBreakerSilenceMs=300000] - how long the circuit stays open once tripped
+   * @param {Function} [opts.onStormDetected]             - async (chatId) => void; invoked once per storm trip
+   * @param {Object}   [opts.logger]
    */
   constructor(opts = {}) {
-    this.stormThreshold  = opts.stormThreshold              || 2;
-    this.maxOutbound     = opts.circuitBreakerMaxOutbound   || 5;
-    this.silenceMs       = opts.circuitBreakerSilenceMs     || 300_000;
-    this.onStormDetected = opts.onStormDetected             || (() => {});
-    this.log             = opts.logger || { info: ()=>{}, warn: ()=>{}, debug: ()=>{} };
+    this.stormThreshold   = opts.stormThreshold              || 5;
+    this.stormWindowMs    = opts.stormWindowMs               || 30_000;
+    this.maxOutbound      = opts.circuitBreakerMaxOutbound   || 5;
+    this.circuitWindowMs  = opts.circuitWindowMs             || 60_000;
+    this.silenceMs        = opts.circuitBreakerSilenceMs     || 300_000;
+    this.onStormDetected  = opts.onStormDetected             || (() => {});
+    this.log              = opts.logger || { info: ()=>{}, warn: ()=>{}, debug: ()=>{} };
 
     // chatId → { botInboundTs: number[], outboundTs: number[], circuitOpenAt: number|null }
     this._state = new Map();
@@ -41,33 +44,29 @@ class StormGuard {
   }
 
   /**
-   * 记录一次 bot 发来的 @Jarvis 消息
+   * Record one bot-inbound @-mention.
    * @returns {{ drop: boolean, reason: string|null }}
    */
   recordBotInbound(chatId) {
     const s   = this._state_(chatId);
     const now = Date.now();
 
-    // 检查熔断状态
     if (s.circuitOpenAt !== null) {
       if (now - s.circuitOpenAt < this.silenceMs) {
         this.log.info(`[storm-guard] circuit OPEN for ${chatId}, dropping`);
         return { drop: true, reason: 'circuit_open' };
       }
-      // 熔断已过期，重置
       s.circuitOpenAt  = null;
       s.botInboundTs   = [];
       this.log.info(`[storm-guard] circuit reset for ${chatId}`);
     }
 
-    // 清理窗口外记录
-    s.botInboundTs = s.botInboundTs.filter(ts => now - ts < STORM_WINDOW_MS);
+    s.botInboundTs = s.botInboundTs.filter(ts => now - ts < this.stormWindowMs);
     s.botInboundTs.push(now);
 
     if (s.botInboundTs.length >= this.stormThreshold) {
-      this.log.warn(`[storm-guard] storm detected in ${chatId}: ${s.botInboundTs.length} msgs in 30s`);
-      s.botInboundTs = []; // 重置计数，进入冷却期
-      // 异步通知，不阻塞 hook 返回
+      this.log.warn(`[storm-guard] storm detected in ${chatId}: ${s.botInboundTs.length} msgs in ${this.stormWindowMs/1000}s`);
+      s.botInboundTs = [];
       Promise.resolve().then(() => this.onStormDetected(chatId)).catch(() => {});
       return { drop: true, reason: 'storm_debounce' };
     }
@@ -76,12 +75,12 @@ class StormGuard {
   }
 
   /**
-   * 记录一次 Jarvis outbound 消息（用于熔断计数）
+   * Record one agent outbound message (feeds the circuit-breaker counter).
    */
   recordOutbound(chatId) {
     const s   = this._state_(chatId);
     const now = Date.now();
-    s.outboundTs = s.outboundTs.filter(ts => now - ts < CIRCUIT_WINDOW_MS);
+    s.outboundTs = s.outboundTs.filter(ts => now - ts < this.circuitWindowMs);
     s.outboundTs.push(now);
 
     if (s.outboundTs.length >= this.maxOutbound) {
@@ -91,7 +90,7 @@ class StormGuard {
     }
   }
 
-  /** 手动重置（如 Lucien 发指令解除静默） */
+  /** Manual reset (e.g. operator command to clear the silence window). */
   reset(chatId) {
     this._state.delete(chatId);
     this.log.info(`[storm-guard] manual reset for ${chatId}`);

@@ -1,21 +1,21 @@
 'use strict';
 
 /**
- * feishu-bot-social — Plugin 主入口（OpenClaw 5.x compatible）
+ * feishu-social — optional in-tree extension (OpenClaw 5.x compatible).
  *
- * Hook 注册：
- *   1. message_received    — 观察入站消息（storm 计数 + 记录最近 bot @Jarvis）
- *   2. before_prompt_build — 群上下文注入 system prompt（含最近 bot mention 提示）
- *   3. message_sending     — @alias → <at user_id="..."> + outbound 熔断计数
+ * Disabled by default. Activates only when `social.enabled: true` is set in
+ * pluginConfig. When enabled, registers three hooks:
+ *   1. message_received    — observe inbound; storm-guard counter + record last bot @-mention
+ *   2. before_prompt_build — inject group history block into the system prompt (incl. last-mention identity hint)
+ *   3. message_sending     — rewrite @alias → <at user_id="..."> + outbound circuit-breaker counter
  *
- * 重要：OpenClaw 5.x 已停用通用 inbound_claim hook（runInboundClaim 函数零调用，
- *   仅 runInboundClaimForPluginOutcome 在对话 binding 时触发）。本插件改用
- *   message_received（fire-and-forget），不再尝试丢弃消息或修改 content。
- *   消息守卫职责由 OpenClaw 上层 groupPolicy/requireMention 配置完成。
- *
- * register() 设计：OpenClaw 5.x 在 startup 和每个 session 都会 register；
- *   只有 startup register 的 api.config 含 channels.accounts。所有共享状态
- *   提到模块级 SHARED 对象，register() 仅在配置可用时更新它。
+ * Notes:
+ * - OpenClaw 5.x deprecated the generic `inbound_claim` hook; this extension
+ *   uses `message_received` (fire-and-forget). Group/DM admission is owned by
+ *   the host's existing groupPolicy/requireMention config.
+ * - register() runs at startup and per-session; only the startup pass receives
+ *   `api.config.channels.accounts`. Shared state lives in module-level SHARED;
+ *   register() updates it lazily when more config becomes available.
  */
 
 const path = require('path');
@@ -50,7 +50,8 @@ const SHARED = {
   tokenCache   : new Map(),
   tokenInflight: new Map(),
 
-  // 最近一次 bot @Jarvis 的发件人（用于在 before_prompt_build 中注入身份提示）
+  // Last bot @-mention per chat (used to inject the addressee identity into
+  // the system prompt at before_prompt_build time).
   // chatId → { senderName, senderAtTag, ts }
   lastBotMention: new Map(),
 
@@ -157,15 +158,18 @@ async function getTenantToken(accountId = 'default') {
 
 function ensureSingletons(cfg, api, glog) {
   if (!SHARED.log) {
-    SHARED.log = makeLogger(cfg.debugLog !== false, path.join(os.homedir(), '.openclaw', 'feishu-social', 'logs'));
+    const logDir = cfg.logDir || path.join(os.homedir(), '.openclaw', 'feishu-social', 'logs');
+    SHARED.log = makeLogger(cfg.debugLog !== false, logDir);
   }
   if (!SHARED.contextCache) {
     SHARED.contextCache = new ContextCache(Number(cfg.contextCacheTtlMs) || 60_000);
   }
   if (!SHARED.stormGuard) {
     SHARED.stormGuard = new StormGuard({
-      stormThreshold            : Number(cfg.stormThreshold)            || 2,
+      stormThreshold            : Number(cfg.stormThreshold)            || 5,
+      stormWindowMs             : Number(cfg.stormWindowMs)             || 30_000,
       circuitBreakerMaxOutbound : Number(cfg.circuitBreakerMaxOutbound) || 5,
+      circuitWindowMs           : Number(cfg.circuitWindowMs)           || 60_000,
       circuitBreakerSilenceMs   : Number(cfg.circuitBreakerSilenceMs)   || 300_000,
       logger                    : SHARED.log,
       onStormDetected           : sendStormDM,
@@ -175,11 +179,11 @@ function ensureSingletons(cfg, api, glog) {
     SHARED.registry = new BotRegistry(SHARED.log, { wikiBotsPath: cfg.wikiBotsPath });
     SHARED.registry.load(cfg, api.config || {})
       .then(() => {
-        glog?.info('[feishu-bot-social] registry loaded');
+        glog?.info('[feishu-social] registry loaded');
         SHARED.log.info('[registry] load complete');
       })
       .catch(e => {
-        glog?.warn(`[feishu-bot-social] registry load failed: ${e.message}`);
+        glog?.warn(`[feishu-social] registry load failed: ${e.message}`);
         SHARED.log.error(`[registry] load failed: ${e.message}`);
       });
   }
@@ -219,7 +223,7 @@ async function sendStormDM(chatId) {
         receive_id: SHARED.alertReceiverOpenId,
         msg_type  : 'text',
         content   : JSON.stringify({
-          text: `⚠️ [fbs] Bot 消息循环风险，已暂停响应 bot @mention\n群：${chatId}`,
+          text: `⚠️ [feishu-social] reply-loop risk detected; pausing responses to bot @-mentions in chat ${chatId}`,
         }),
       }),
     });
@@ -232,41 +236,53 @@ async function sendStormDM(chatId) {
 // ── Plugin 定义 ─────────────────────────────────────────────────────────────
 
 const plugin = {
-  id         : 'feishu-bot-social',
-  name       : 'Feishu Bot Social',
-  description: '飞书群聊 Bot 社交感知：群上下文注入 / @alias 格式转换 / 防风暴',
+  id         : 'feishu-social',
+  name       : 'Feishu Social',
+  description: 'Optional in-tree extension: group-context injection, sender-name fallback, and bot reply-loop guard for the Feishu channel.',
 
   register(api) {
-    // Dual lookup: when wired under openclaw-lark, config lives at .social;
-    // when fbs runs as a discrete plugin, it lives at the root.
+    // Config locations:
+    //   - bundled inside openclaw-lark-extended: api.pluginConfig.social
+    //   - hypothetically as a standalone plugin: api.pluginConfig
     const cfg  = api.pluginConfig?.social ?? api.pluginConfig ?? {};
     const glog = api.logger;
+
+    // Master switch — disabled by default. When the user has not opted in,
+    // skip all hook registration and singleton initialization. This keeps a
+    // clean install behaviorally identical to upstream openclaw-lark.
+    if (cfg.enabled !== true) {
+      glog?.info('[feishu-social] disabled (set social.enabled: true to activate)');
+      return;
+    }
 
     captureConfigFromApi(api, cfg);
     ensureSingletons(cfg, api, glog);
 
     const log = SHARED.log;
-    log.info('=== feishu-bot-social registering ===');
+    log.info('=== feishu-social registering ===');
     log.info(`[init] accounts: ${Object.keys(SHARED.feishuAccounts).join(', ') || '(none)'} | first appId: ${Object.values(SHARED.feishuAccounts)[0]?.appId?.slice(0,8) || 'undefined'}...`);
     log.info(`target groups: ${[...SHARED.targetGroups].join(', ') || '(none)'}`);
     log.info(`context count: ${SHARED.contextCount}`);
     log.info(`alert receiver: ${SHARED.alertReceiverOpenId || '(not configured, DM disabled)'}`);
 
     // ════════════════════════════════════════════════════════════════════════
-    // Hook 1: message_received（替代已停用的 inbound_claim）
+    // Hook 1: message_received (replaces the deprecated inbound_claim hook)
     //
-    // 触发时机：OpenClaw 上层 groupPolicy/requireMention 已判定要 dispatch 后触发
-    // 语义：fire-and-forget void hook — 不能 drop 消息、不能修改 content
-    // 用途：
-    //   1. 识别 sender 是否 bot；记录最近一次 bot @Jarvis 用于 system prompt 注入
-    //   2. storm guard L2 inbound 计数（触发阈值后通过 DM 通知管理员）
-    //   3. 异步触发 history-discovery
+    // Triggered after the host has already decided to dispatch this event
+    // (groupPolicy / requireMention etc. all passed). Fire-and-forget void
+    // hook — cannot drop the event or mutate content.
     //
-    // ctx 字段（源码验证 message-hook-mappers toPluginMessageContext）：
+    // Used here to:
+    //   1. Detect if the sender is a bot; record the latest bot @-mention so
+    //      Hook 2 can inject sender identity into the system prompt.
+    //   2. Storm-guard inbound counting (trips threshold → optional admin DM).
+    //   3. Kick off async history-discovery for the registry.
+    //
+    // ctx fields (per host's toPluginMessageContext):
     //   ctx.channelId      = 'feishu'
-    //   ctx.conversationId = 群=oc_xxx, DM=ou_xxx
-    //   ctx.senderId       = sender open_id 或 app_id
-    //   ctx.sessionKey     = 'agent:jarvis:feishu:group:oc_xxx'
+    //   ctx.conversationId = oc_xxx (group) / ou_xxx (DM)
+    //   ctx.senderId       = sender open_id or app_id
+    //   ctx.sessionKey     = 'agent:<id>:feishu:group:oc_xxx'
     // ════════════════════════════════════════════════════════════════════════
     api.on('message_received', (event, ctx) => {
       if (ctx?.channelId !== 'feishu') return;
@@ -309,15 +325,15 @@ const plugin = {
         return;
       }
 
-      // storm guard：bot @Jarvis 计数（已 dispatch 来到这里，意味着 OpenClaw 判定要触发）
+      // Storm-guard: count bot inbound @-mention. message_received is
+      // fire-and-forget so we cannot drop the event here; the outbound circuit
+      // breaker on Hook 3 enforces silence once the storm trips.
       const sr = SHARED.stormGuard.recordBotInbound(chatId);
       if (sr.drop) {
-        // 注意：v5 message_received 是 fire-and-forget，无法真正 drop；
-        // storm 状态会通过 DM 通知管理员，并阻断后续 outbound（熔断在 message_sending 侧生效）
         log.warn(`[message_received] storm condition reached: reason=${sr.reason} chat=${chatId} (cannot drop here; outbound circuit will block replies)`);
       }
 
-      // 记录最近 bot 提及，用于 before_prompt_build 注入身份提示
+      // Record the latest bot mention so Hook 2 can render an addressee block.
       const senderName  = `${senderBot.name}${senderBot.emoji ? ' ' + senderBot.emoji : ''}`;
       const senderAtTag = senderBot.openId
         ? `<at user_id="${senderBot.openId}">${senderBot.name}</at>`
@@ -329,7 +345,7 @@ const plugin = {
         ts: Date.now(),
       });
       log.info(`[message_received] bot mention from ${senderName} in ${chatId}`);
-      glog?.info(`[feishu-bot-social] bot @Jarvis from ${senderName}`);
+      glog?.info(`[feishu-social] bot mention from ${senderName}`);
     });
 
     // ════════════════════════════════════════════════════════════════════════
@@ -364,19 +380,20 @@ const plugin = {
           const messages = await fetchGroupContext(chatId, SHARED.contextCount, token, SHARED.feishuBase);
           log.info(`[before_prompt_build] fetched ${messages.length} msgs from ${chatId}`);
           SHARED.registry.discoverFromHistory(chatId, token, SHARED.feishuBase).catch(() => {});
-          baseBlock = formatContextBlock({ messages, registry: SHARED.registry, chatId });
+          baseBlock = formatContextBlock({ messages, registry: SHARED.registry, chatId, cfg });
           SHARED.contextCache.set(chatId, baseBlock);
         } catch (e) {
           log.warn(`[before_prompt_build] fetch failed: ${e.message}, degrading`);
-          glog?.warn(`[feishu-bot-social] context fetch failed for ${chatId}: ${e.message}`);
+          glog?.warn(`[feishu-social] context fetch failed for ${chatId}: ${e.message}`);
           return;
         }
       }
 
-      // 追加最近 bot 提及身份信息（替代旧版 inbound_claim 的 prefix 注入）
+      // Append the most-recent bot-mention identity hint so the agent knows
+      // who triggered this turn (degenerates to empty when no recent mention).
       const mention = SHARED.lastBotMention.get(chatId);
       const mentionBlock = (mention && Date.now() - mention.ts < LAST_MENTION_TTL_MS)
-        ? `\n\n[最近触发本次响应的发件人]\n  ${mention.senderName}\n  如需 @ 回对方：${mention.senderAtTag}`
+        ? `\n\n[Last bot mention that triggered this turn]\n  ${mention.senderName}\n  to @-reply: ${mention.senderAtTag}`
         : '';
 
       return { appendSystemContext: baseBlock + mentionBlock };
@@ -413,13 +430,14 @@ const plugin = {
         }
       }
 
-      // 熔断计数：用 ctx.conversationId 取群 chatId（channelId 在 outbound 固定为 'feishu'）
-      // 同样归一化 'chat:oc_xxx' 前缀
+      // Outbound counter for the circuit breaker. Source the chatId from
+      // ctx.conversationId (channelId is fixed to 'feishu' on outbound).
       const chatId = normalizeConversationId(ctx?.conversationId);
       if (chatId && SHARED.targetGroups.has(chatId)) {
         SHARED.stormGuard.recordOutbound(chatId);
-        // 主动失效本群的 ContextCache：保证 Jarvis 自己的回复在下一条消息的
-        // 群历史里能立即看到，不会被 60s TTL 阻挡（fork plan §6.1, Bug A）。
+        // Drop the cached group history for this chat immediately so the next
+        // turn's context block reflects the agent's own reply rather than the
+        // pre-reply snapshot still inside the 60s TTL.
         const purged = SHARED.contextCache.invalidate(chatId);
         if (purged > 0) log.debug(`[message_sending] contextCache invalidated for ${chatId} (${purged} keys)`);
       }
@@ -427,8 +445,8 @@ const plugin = {
       if (modified) return { content };
     });
 
-    log.info('=== feishu-bot-social all hooks registered ===');
-    glog?.info('[feishu-bot-social] registered: message_received + before_prompt_build + message_sending');
+    log.info('=== feishu-social all hooks registered ===');
+    glog?.info('[feishu-social] registered: message_received + before_prompt_build + message_sending');
   },
 };
 

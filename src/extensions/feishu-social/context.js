@@ -1,17 +1,49 @@
 'use strict';
 
 /**
- * context.js — 群消息上下文拉取与格式化
+ * context.js — group history fetch + rendering for the system-prompt context block.
  *
- * buildExcerpt   : 移植自 [R2] read-actions patch §3.2.2，增加 post @mention 解析
- * fetchGroupContext : 直接调飞书 API（不依赖 read-actions patch 内部实现）
- * formatContextBlock : 生成注入 system prompt 的 appendSystemContext 字符串
- * ContextCache   : 分钟级 key，同一群同一分钟内复用，避免重复拉取
+ * Public API:
+ *   buildExcerpt        — normalize a single Feishu message to a one-line summary (8 msg_types covered)
+ *   fetchGroupContext   — pull recent group messages via Feishu OAPI
+ *   formatContextBlock  — render the appendSystemContext string from a fetched message list,
+ *                         using the user's configured template (or DEFAULT_CONTEXT_TEMPLATE)
+ *   ContextCache        — minute-keyed cache so multiple turns inside the same minute reuse one fetch
+ *   DEFAULT_CONTEXT_TEMPLATE — the built-in neutral template (exported for tests / docs)
+ *
+ * Templates are plain strings with {placeholder} substitution. Available placeholders:
+ *   {time}        — current local time HH:MM
+ *   {count}       — number of messages rendered
+ *   {timeline}    — formatted message timeline
+ *   {members}     — member @-map (one per line)
+ *   {groupBots}   — known bot list (one per line, with @-tag and id metadata)
+ *   {botCount}    — number of bots in groupBots
+ *   {adminName}   — value of social.adminDisplayName (default 'the admin')
  */
 
 const { formatTime, safeParseJson, truncate } = require('./utils');
 
 const EXCERPT_MAX_LEN = 150;
+
+// ── default template ──────────────────────────────────────────────────────────
+// Neutral block: lists members + recent timeline + an @-format reminder. Does
+// not assume a multi-bot room, does not name a specific admin. Override via
+// social.contextTemplate; see examples/social-context-templates/ for a richer
+// multi-bot Chinese variant.
+const DEFAULT_CONTEXT_TEMPLATE = `
+[Group chat context · {time}]
+
+Members in this chat (use the <at> tags below when you want to notify them; plain @Name does not notify):
+{members}
+
+Recent messages ({count}):
+{timeline}
+[/Group chat context]
+`.trim();
+
+function renderTemplate(tmpl, vars) {
+  return tmpl.replace(/\{(\w+)\}/g, (full, key) => (vars[key] !== undefined ? String(vars[key]) : full));
+}
 
 // ── buildExcerpt ──────────────────────────────────────────────────────────────
 
@@ -148,69 +180,60 @@ function formatMessageTimeline(messages, registry) {
 }
 
 /**
- * 构建完整的群聊感知上下文注入字符串
- * 返回值用于 before_prompt_build hook 的 appendSystemContext 字段
+ * Render the appendSystemContext block from a fetched message list.
  *
  * @param {Object} opts
- * @param {Array}       opts.messages  - fetchGroupContext 的结果
+ * @param {Array}       opts.messages  - result of fetchGroupContext
  * @param {BotRegistry} opts.registry
  * @param {string}      opts.chatId
+ * @param {Object}      [opts.cfg]     - social.* config (template, adminDisplayName)
  * @returns {string}
  */
-function formatContextBlock({ messages, registry, chatId }) {
+function formatContextBlock({ messages, registry, chatId, cfg = {} }) {
   const displayBots = registry.getDisplayBots();
   const now         = new Date();
   const timeStr     = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
 
-  // 注入 bot 名字 + open_id + app_id，让 Jarvis 知道如何正确 @ 各 bot
-  // 参考 [R1] feishu-bot-chat-plugin 的做法：注入 at 标签模板
   const botListStr = displayBots.length > 0
     ? displayBots.map(b => {
         const atTag = b.openId
           ? `<at user_id="${b.openId}">${b.name}</at>`
           : `@${b.name}`;
         const idInfo = [
-          b.openId  ? `open_id: ${b.openId}`  : '',
-          b.appId   ? `app_id: ${b.appId}`    : '',
+          b.openId ? `open_id: ${b.openId}` : '',
+          b.appId  ? `app_id: ${b.appId}`   : '',
         ].filter(Boolean).join(', ');
-        const ownerName = b.owner?.name || '未知';
-        return `  ${b.emoji || '🤖'} ${b.name}（${ownerName} 的助理）\n` +
-               `     @ 方式: ${atTag}\n` +
+        const ownerName = b.owner?.name || 'unknown';
+        return `  ${b.emoji || '🤖'} ${b.name} (assistant of ${ownerName})\n` +
+               `     @-tag: ${atTag}\n` +
                `     ID: ${idInfo}`;
       }).join('\n')
-    : '  （未发现其他 AI Bot）';
+    : '  (no bots discovered yet)';
 
   const timelineStr = formatMessageTimeline(messages, registry);
 
-  // 人员 @ 映射表
   const members = registry.getMembers ? registry.getMembers() : [];
   const memberMapStr = members.length > 0
     ? members.map(m => {
         const atTag = m.openId ? `<at user_id="${m.openId}">${m.name}</at>` : `@${m.name}`;
         const aliases = (m.aliases || []).filter(a => a !== m.name).join('/');
-        return `  ${m.name}${aliases ? '（' + aliases + '）' : ''}：${atTag}`;
+        return `  ${m.name}${aliases ? ' (' + aliases + ')' : ''}: ${atTag}`;
       }).join('\n')
-    : '  （无）';
+    : '  (no member entries)';
 
-  return `
-[群聊感知上下文 · ${timeStr}]
+  const tmpl = typeof cfg.contextTemplate === 'string' && cfg.contextTemplate.trim()
+    ? cfg.contextTemplate
+    : DEFAULT_CONTEXT_TEMPLATE;
 
-本群活跃 AI Bot（${displayBots.length} 个）：
-${botListStr}
-
-本群人员 @ 映射（用于在回复中正确 @ 人）：
-${memberMapStr}
-
-近期消息（最近 ${messages.length} 条，含 Bot 发言）：
-${timelineStr}
-
-交互规则：
-① 上方是群内近期真实消息记录，包括其他 Bot 的发言，可基于此回复
-② 回复中可以自然提及名字，但「提到」≠「@通知」；需要通知对方才用上方的 <at> 标签
-③ 只有 Lucien 明确要求与某 Bot 互动时，才用 @名字（系统自动转 at 标签）
-④ 不要主动发起 Bot 间来回对话，防止循环响应
-[/群聊感知上下文]
-`.trim();
+  return renderTemplate(tmpl, {
+    time      : timeStr,
+    count     : messages.length,
+    timeline  : timelineStr,
+    members   : memberMapStr,
+    groupBots : botListStr,
+    botCount  : displayBots.length,
+    adminName : cfg.adminDisplayName || 'the admin',
+  });
 }
 
 // ── ContextCache ──────────────────────────────────────────────────────────────
@@ -241,8 +264,9 @@ class ContextCache {
     this._cache.set(this._key(chatId), value);
   }
 
-  // 主动失效：在 Jarvis 回复后立即丢弃该群的缓存，
-  // 避免下一条消息仍读到回复前的旧快照（fork plan §6.1, Bug A）。
+  // Drop cached entries for chatId immediately after the agent replies, so the
+  // next inbound turn re-fetches fresh history that includes that reply rather
+  // than reading the pre-reply snapshot still inside the 60s TTL window.
   invalidate(chatId) {
     const prefix = `${chatId}:`;
     let n = 0;
@@ -256,4 +280,11 @@ class ContextCache {
   }
 }
 
-module.exports = { buildExcerpt, fetchGroupContext, formatContextBlock, ContextCache };
+module.exports = {
+  buildExcerpt,
+  fetchGroupContext,
+  formatContextBlock,
+  ContextCache,
+  DEFAULT_CONTEXT_TEMPLATE,
+  renderTemplate,
+};
