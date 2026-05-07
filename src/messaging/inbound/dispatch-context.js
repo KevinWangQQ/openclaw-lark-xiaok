@@ -49,7 +49,15 @@ function buildDispatchContext(params) {
     const error = runtime.error;
     const isComment = (0, comment_target_1.isCommentTarget)(ctx.chatId);
     const isGroup = !isComment && ctx.chatType === 'group';
-    const isThread = isGroup && Boolean(ctx.threadId);
+    // ── Patch 2: per-group replyInThread ──
+    let forceThread = false;
+    if (isGroup) {
+        const feishuCfg = accountScopedCfg?.channels?.feishu || {};
+        const groupCfg = feishuCfg.groups?.[ctx.chatId] || feishuCfg.groups?.['*'] || {};
+        const replyInThreadCfg = groupCfg.replyInThread ?? feishuCfg.replyInThread;
+        forceThread = replyInThreadCfg === true || replyInThreadCfg === 'enabled';
+    }
+    const isThread = isGroup && (Boolean(ctx.threadId) || forceThread);
     const core = lark_client_1.LarkClient.runtime;
     const feishuFrom = `feishu:${ctx.senderId}`;
     // Comment targets use the comment target string directly as the "To"
