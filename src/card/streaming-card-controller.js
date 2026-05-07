@@ -753,7 +753,7 @@ class StreamingCardController {
                     // Step 1: Create card entity
                     const cId = await (0, cardkit_1.createCardEntity)({
                         cfg: this.deps.cfg,
-                        card: (0, builder_1.buildStreamingThinkingCard)(this.deps.toolUseDisplay.showToolUse, this.deps.cfg?.channels?.feishu?.spinnerStyle),
+                        card: (0, builder_1.buildStreamingThinkingCard)(this.deps.toolUseDisplay.showToolUse, this.deps.cfg),
                         accountId: this.deps.accountId,
                     });
                     if (this.isStaleCreate(epoch)) {
@@ -972,13 +972,11 @@ class StreamingCardController {
             return;
         try {
             const display = this.computeToolUseDisplay();
-            // ── Patch 5: read spinnerStyle from cfg for phrase routing ──
-                const _spinnerStyle = this.deps.cfg?.channels?.feishu?.spinnerStyle;
-                const card = (0, builder_1.buildStreamingPreAnswerCard)({
+            const card = (0, builder_1.buildStreamingPreAnswerCard)({
                 steps: display?.steps,
                 elapsedMs: this.visibleToolUseElapsedMs,
                 showToolUse: this.shouldDisplayToolUse,
-                spinnerStyle: _spinnerStyle,
+                cfg: this.deps.cfg,
             });
             this.cardKit.cardKitSequence += 1;
             await (0, cardkit_1.updateCardKitCard)({

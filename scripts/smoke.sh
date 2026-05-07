@@ -46,10 +46,7 @@ else
   patch_check "patch1"  "Non-OAuth card action"  "src/channel/event-handlers.js"             2
   patch_check "patch2"  "Patch 2"                 "src/messaging/inbound/dispatch-context.js" 1
   patch_check "patch4b" "Patch 4b"                "src/card/streaming-card-controller.js"     2
-  patch_check "patch5z" "SPINNER_PHRASES_ZH"      "src/card/builder.js"                       1
-  patch_check "patch5l" "SPINNER_PHRASES_LYRA"    "src/card/builder.js"                       1
-  patch_check "patch5s" "spinnerStyle"            "src/card/builder.js"                       5
-  patch_check "patch5c" "spinnerStyle"            "src/card/streaming-card-controller.js"     3
+  patch_check "patch5"  "spinnerPhrases"          "src/card/builder.js"                       1
   patch_check "patch7"  "getTypingEmojiType"      "src/messaging/outbound/typing.js"          2
 fi
 
