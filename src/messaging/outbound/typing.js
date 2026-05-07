@@ -31,7 +31,15 @@ const log = (0, lark_logger_1.larkLogger)('outbound/typing');
  * "Typing" is a built-in Feishu emoji that shows a pencil / keyboard
  * animation, making it a natural choice for a typing cue.
  */
-const TYPING_EMOJI_TYPE = 'Typing';
+// ── Patch 7 (extended): per-account configurable typing emoji, supports random pool ──
+// Read from cfg.channels.feishu.typingEmoji, fallback to 'Get'
+// Single:   channels.feishu.typingEmoji: "Get"
+// Random:   channels.feishu.typingEmoji: "Get,DONE,JIAYI"  ← randomly picks one each time
+function getTypingEmojiType(cfg) {
+    const raw = cfg?.channels?.feishu?.typingEmoji ?? 'Get';
+    const pool = raw.split(',').map(s => s.trim()).filter(Boolean);
+    return pool[Math.floor(Math.random() * pool.length)];
+}
 // ---------------------------------------------------------------------------
 // addTypingIndicator
 // ---------------------------------------------------------------------------
@@ -67,7 +75,7 @@ async function addTypingIndicator(params) {
                 },
                 data: {
                     reaction_type: {
-                        emoji_type: TYPING_EMOJI_TYPE,
+                        emoji_type: getTypingEmojiType(cfg),
                     },
                 },
             }),
