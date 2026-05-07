@@ -237,6 +237,20 @@ class ContextCache {
     }
     this._cache.set(this._key(chatId), value);
   }
+
+  // 主动失效：在 Jarvis 回复后立即丢弃该群的缓存，
+  // 避免下一条消息仍读到回复前的旧快照（fork plan §6.1, Bug A）。
+  invalidate(chatId) {
+    const prefix = `${chatId}:`;
+    let n = 0;
+    for (const k of this._cache.keys()) {
+      if (k.startsWith(prefix)) {
+        this._cache.delete(k);
+        n++;
+      }
+    }
+    return n;
+  }
 }
 
 module.exports = { buildExcerpt, fetchGroupContext, formatContextBlock, ContextCache };
