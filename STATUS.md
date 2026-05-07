@@ -3,15 +3,19 @@
 Snapshot of the fork's current state. Updated when productionization phases
 complete or live deployment changes.
 
-Last updated: **2026-05-07** (after first live cutover)
+Last updated: **2026-05-07** (after first live cutover + GitHub push)
 
 ## TL;DR
 
 - Fork version: **0.1.1**
 - Upstream baseline: **`@larksuite/openclaw-lark@2026.5.7`** (in sync with npm latest)
-- Distribution: **internal team share via git repo**; npm publish not yet
+- Distribution: **internal team share** via private GitHub repo
+  [`ChenyqThu/openclaw-lark-extended`](https://github.com/ChenyqThu/openclaw-lark-extended);
+  npm publish not yet
 - Live deployment: ✅ running on the maintainer's mac-mini gateway since
-  2026-05-07 13:31 PDT, pid 4410 active, no drift
+  2026-05-07 13:31 PDT, pid 4410 active, no runtime drift (the cosmetic
+  package.json version banner drift will resolve on the next code-level
+  deploy)
 
 ## Branches
 
@@ -79,12 +83,6 @@ tail -f /tmp/openclaw/openclaw-$(date +%Y-%m-%d).log        # live log
 restarts the gateway.
 
 ## Open follow-ups (not blocking anything live)
-
-- **`repository.url` in `package.json`** — TBD until the repo is pushed to
-  a git host. Set it to the public URL once the maintainer picks one.
-- **Push to internal git remote** — currently the repo is local-only at
-  `~/Projects/openclaw-lark-fork`. Pushing to GitHub / GitLab / Bytebase /
-  similar is the next collaboration step.
 - **`replay-feishu-event.mjs` is still a Phase 0 stub** — parses the
   fixture but does not invoke `handleFeishuMessage`. Implementing real
   replay requires mocking the Lark SDK; a future phase.
