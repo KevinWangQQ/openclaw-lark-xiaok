@@ -381,6 +381,10 @@ const plugin = {
       const chatId = normalizeConversationId(ctx?.conversationId);
       if (chatId && SHARED.targetGroups.has(chatId)) {
         SHARED.stormGuard.recordOutbound(chatId);
+        // 主动失效本群的 ContextCache：保证 Jarvis 自己的回复在下一条消息的
+        // 群历史里能立即看到，不会被 60s TTL 阻挡（fork plan §6.1, Bug A）。
+        const purged = SHARED.contextCache.invalidate(chatId);
+        if (purged > 0) log.debug(`[message_sending] contextCache invalidated for ${chatId} (${purged} keys)`);
       }
 
       if (modified) return { content };
