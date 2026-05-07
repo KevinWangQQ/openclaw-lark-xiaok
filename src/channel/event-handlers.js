@@ -348,16 +348,45 @@ async function handleCommentEvent(ctx, data) {
 // ---------------------------------------------------------------------------
 async function handleCardActionEvent(ctx, data) {
     try {
-        // AskUserQuestion：表单卡片交互（宿主内建能力优先）
+        // AskUserQuestion card interactions
         const askResult = (0, ask_user_question_1.handleAskUserAction)(data, ctx.cfg, ctx.accountId);
         if (askResult !== undefined)
             return askResult;
-        // auto-auth：授权/权限引导相关卡片交互（宿主内建能力优先）
+        // Auto-auth card actions
         const authResult = await (0, auto_auth_1.handleCardAction)(data, ctx.cfg, ctx.accountId);
         if (authResult !== undefined)
             return authResult;
-        // 业务自定义卡片交互：使用 SDK 标准 interactive dispatch 管道转发给业务插件。
-        return await (0, interactive_dispatch_1.dispatchFeishuPluginInteractiveHandler)({ cfg: ctx.cfg, accountId: ctx.accountId, data });
+        // Try SDK plugin interactive dispatch first (4.10+ native)
+        const sdkResult = await (0, interactive_dispatch_1.dispatchFeishuPluginInteractiveHandler)({ cfg: ctx.cfg, accountId: ctx.accountId, data });
+        if (sdkResult !== undefined)
+            return sdkResult;
+        // ── Patch 1: Non-OAuth card action → forward to agent as synthetic message ──
+        const operator = data.operator || {};
+        const openId = operator.open_id;
+        const action = data.action || {};
+        const actionValue = { ...(action.value || {}), ...(action.form_value || {}) };
+        if (action.tag) actionValue._action_tag = action.tag;
+        if (!actionValue._action_name && action.value?._action_name) {
+            actionValue._action_name = action.value._action_name;
+        }
+        const chatId = data.open_chat_id || data.context?.open_chat_id || '';
+        const msgId = data.open_message_id || data.context?.open_message_id || '';
+        elog.info(`Non-OAuth card action from ${openId} in ${chatId}: ${JSON.stringify(actionValue)}`);
+        const syntheticEvent = {
+            sender: { sender_id: { open_id: openId } },
+            message: {
+                message_id: msgId || `card_action_${Date.now()}`,
+                chat_id: chatId,
+                chat_type: chatId ? 'group' : 'p2p',
+                message_type: 'text',
+                content: JSON.stringify({ text: JSON.stringify(actionValue) }),
+            },
+        };
+        await (0, handler_1.handleFeishuMessage)({
+            cfg: ctx.cfg, event: syntheticEvent,
+            botOpenId: ctx.lark.botOpenId, runtime: ctx.runtime,
+            chatHistories: ctx.chatHistories, accountId: ctx.accountId,
+        });
     }
     catch (err) {
         elog.warn(`card.action.trigger handler error: ${err}`);
