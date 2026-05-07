@@ -50,6 +50,7 @@ These are upstream's; documented here for completeness.
 | `groupAllowFrom` | string \| string[] | — | Sender-id allowlist for groups (or chat-id allowlist for legacy compat) |
 | `requireMention` | boolean | `false` | Group messages need an explicit @-mention to dispatch |
 | `respondToMentionAll` | boolean | `false` | Treat `@all` as an @-mention of this bot |
+| `groups` | record | — | Map of `oc_<chatid>` → per-group overrides. See the table below. |
 
 ### Per-group overrides (`groups[<oc_chatid>]`)
 
