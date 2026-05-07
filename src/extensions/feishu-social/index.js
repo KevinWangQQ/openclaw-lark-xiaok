@@ -443,6 +443,7 @@ module.exports.registerFeishuSocial = registerFeishuSocial;
 
 // Local member-name lookup: openclaw-lark's enrich.js consults this when the
 // contact OAPI returns no display name (missing permission, cache miss, etc.).
+// Returns {name, source} so callers can log which path resolved the identity.
 // Resolution order:
 //   1. SHARED.memberCache (Phase 7) — populated dynamically by im.chatMembers.get
 //      on first contact with each tracked chat. Fresh, accurate, batched.
@@ -452,10 +453,10 @@ module.exports.registerFeishuSocial = registerFeishuSocial;
 function lookupMemberName(openId) {
   if (!openId) return null;
   const cached = SHARED.memberCache?.getName(openId);
-  if (cached) return cached;
+  if (cached) return { name: cached, source: 'member-cache' };
   if (SHARED.registry) {
     const member = SHARED.registry.findMemberByOpenId?.(openId);
-    if (member?.name) return member.name;
+    if (member?.name) return { name: member.name, source: 'wiki-bots-registry' };
   }
   return null;
 }

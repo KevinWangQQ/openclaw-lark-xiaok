@@ -70,10 +70,10 @@ async function resolveSenderInfo(params) {
     if (!ctx.senderName && ctx.senderId) {
         try {
             const social = require('../../extensions/feishu-social/index.js');
-            const localName = social.lookupMemberName?.(ctx.senderId);
-            if (localName) {
-                ctx = { ...ctx, senderName: localName };
-                log(`sender resolved via feishu-social registry: ${localName}`);
+            const local = social.lookupMemberName?.(ctx.senderId);
+            if (local?.name) {
+                ctx = { ...ctx, senderName: local.name };
+                log(`sender resolved via feishu-social ${local.source}: ${local.name}`);
             }
         } catch (_) {
             // social extension not loaded — keep ctx.senderName undefined
