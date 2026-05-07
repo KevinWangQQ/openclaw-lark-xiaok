@@ -24,6 +24,7 @@ const os   = require('os');
 const { BotRegistry }                                        = require('./registry');
 const { fetchGroupContext, formatContextBlock, ContextCache } = require('./context');
 const { StormGuard }                                         = require('./storm-guard');
+const { MemberCache, prefetchChatMembers }                   = require('./member-cache');
 const { escapeRegExp, makeLogger }                           = require('./utils');
 
 // ── 模块级共享状态 ──────────────────────────────────────────────────────────
@@ -42,6 +43,7 @@ const SHARED = {
   registry    : null,
   contextCache: null,
   stormGuard  : null,
+  memberCache : null,   // Phase 7: open_id → name cache populated via chatMembers API
   log         : null,
 
   // tenant token 缓存与 inflight 去重
@@ -181,6 +183,25 @@ function ensureSingletons(cfg, api, glog) {
         SHARED.log.error(`[registry] load failed: ${e.message}`);
       });
   }
+  if (!SHARED.memberCache) {
+    SHARED.memberCache = new MemberCache();
+  }
+}
+
+// Phase 7: small helper that wraps getTenantToken + Feishu base URL + JSON parse,
+// matching the (path, options) → json shape that prefetchChatMembers expects.
+async function larkFetch(pathAndQuery, init = {}) {
+  const token = await getTenantToken();
+  if (!token) return null;
+  const url = `${SHARED.feishuBase}${pathAndQuery}`;
+  const res = await fetch(url, {
+    method: init.method || 'GET',
+    headers: { Authorization: `Bearer ${token}`, ...(init.headers || {}) },
+    body: init.body,
+    signal: AbortSignal.timeout(6000),
+  });
+  if (!res.ok) return { code: res.status, msg: `HTTP ${res.status}` };
+  return res.json();
 }
 
 async function sendStormDM(chatId) {
@@ -254,6 +275,18 @@ const plugin = {
       if (!chatId || !SHARED.targetGroups.has(chatId)) return;
       // 仅群消息有意义（chat_id 以 oc_ 起头；DM 是 ou_，不在 targetGroups 内但加保险）
       if (!chatId.startsWith('oc_')) return;
+
+      // Phase 7: kick off async chat-members prefetch, throttled per-chat.
+      // Populates SHARED.memberCache so lookupMemberName can return display
+      // names without per-message contact API calls.
+      if (SHARED.memberCache && SHARED.memberCache.shouldPrefetchChat(chatId)) {
+        prefetchChatMembers({
+          cache  : SHARED.memberCache,
+          chatId,
+          fetcher: larkFetch,
+          log    : SHARED.log,
+        }).catch(e => SHARED.log?.warn(`[member-cache] prefetch threw: ${e.message}`));
+      }
 
       const senderId = ctx?.senderId;
       if (!senderId) return;
@@ -405,12 +438,21 @@ function registerFeishuSocial(api) {
 module.exports.registerFeishuSocial = registerFeishuSocial;
 
 // Local member-name lookup: openclaw-lark's enrich.js consults this when the
-// contact OAPI returns no display name (missing permission, cache miss, etc.),
-// so ctx.senderName lands as the human-readable name from wiki-bots.json
-// instead of being left undefined and falling through to the open_id.
+// contact OAPI returns no display name (missing permission, cache miss, etc.).
+// Resolution order:
+//   1. SHARED.memberCache (Phase 7) — populated dynamically by im.chatMembers.get
+//      on first contact with each tracked chat. Fresh, accurate, batched.
+//   2. SHARED.registry findMemberByOpenId — legacy wiki-bots.json mapping,
+//      kept as a transitional fallback until the API cache covers all
+//      required senders. Slated for retirement once Phase 7 is stable.
 function lookupMemberName(openId) {
-  if (!openId || !SHARED.registry) return null;
-  const member = SHARED.registry.findMemberByOpenId?.(openId);
-  return member?.name || null;
+  if (!openId) return null;
+  const cached = SHARED.memberCache?.getName(openId);
+  if (cached) return cached;
+  if (SHARED.registry) {
+    const member = SHARED.registry.findMemberByOpenId?.(openId);
+    if (member?.name) return member.name;
+  }
+  return null;
 }
 module.exports.lookupMemberName = lookupMemberName;
