@@ -48,6 +48,31 @@ mv ~/.openclaw/openclaw.json.bak-fork-migration-* ~/.openclaw/openclaw.json
 openclaw gateway restart
 ```
 
+## Optional companion: hard-block mid-turn append in groups
+
+Phase 4's `[name](open_id):` sender labeling already lets the agent
+disambiguate when the runtime folds two consecutive group messages into one
+turn. If you want a hard block on that fold (Phase 5, Bug B), add a
+per-channel queue override in `~/.openclaw/openclaw.json`:
+
+```json
+"messages": {
+  "queue": {
+    "mode": "steer",
+    "byChannel": { "feishu": "queue" },
+    "debounceMs": 500
+  }
+}
+```
+
+This makes the feishu channel use the legacy serial queue. Tradeoff: applies
+to DMs too — DM follow-ups while Jarvis is mid-stream will run as a separate
+reply rather than steering the active turn. Read `docs/SPIKE-MIDTURN-APPEND.md`
+before applying.
+
+`migrate-config.mjs` does not apply this automatically; flip it manually
+when you've decided the tradeoff is acceptable.
+
 ## Retiring the discrete `feishu-bot-social` install
 
 Once `migrate-config.mjs` has run and the gateway is restarted, the
