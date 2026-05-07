@@ -22,6 +22,7 @@
  */
 
 const { formatTime, safeParseJson, truncate } = require('./utils');
+const { resolveUserName } = require('../../tools/oapi/im/name-resolver.js');
 
 const EXCERPT_MAX_LEN = 150;
 
@@ -148,9 +149,18 @@ async function fetchGroupContext(chatId, limit, tenantToken, baseUrl) {
 
 /**
  * 将消息列表格式化为时间轴字符串（供 formatContextBlock 使用）
+ *
+ * 人类 sender 名字 cascade 顺序：
+ *   1. sender.name（若 enrichSendersInPlace 已经写入则首选）
+ *   2. mention 自带 name（当前消息携带，免费）
+ *   3. memberCache（chatMembers prefetch，24h 缓存）
+ *   4. 共享 user-name 缓存（Phase 0 合并）
+ *   5. `用户(last8)` 兜底
  */
-function formatMessageTimeline(messages, registry) {
+function formatMessageTimeline(messages, registry, opts = {}) {
   if (!messages || !messages.length) return '（暂无近期消息记录）';
+
+  const { accountId, memberCache } = opts;
 
   return messages.map(item => {
     const timeStr  = formatTime(item.create_time || item.createTime || '0');
@@ -166,10 +176,21 @@ function formatMessageTimeline(messages, registry) {
         ? `${bot.name}${bot.emoji ? ' ' + bot.emoji : ''}`
         : `Bot(${senderId.slice(-8)})`;
     } else {
-      // 用户：从 mentions 列表里找名字兜底
-      const mentions = item.mentions || [];
-      const m = mentions.find(x => (x.id?.open_id || x.id) === senderId);
-      senderName = m?.name || `用户(${senderId.slice(-8)})`;
+      senderName = sender.name;
+      if (!senderName) {
+        const mentions = item.mentions || [];
+        const m = mentions.find(x => (x.id?.open_id || x.id) === senderId);
+        senderName = m?.name;
+      }
+      if (!senderName && senderId && memberCache?.getName) {
+        senderName = memberCache.getName(senderId);
+      }
+      if (!senderName && accountId && senderId) {
+        senderName = resolveUserName(accountId, senderId);
+      }
+      if (!senderName) {
+        senderName = `用户(${senderId.slice(-8)})`;
+      }
     }
 
     // Sender label: [name](open_id:<last-8>) keeps history rows skimmable while
@@ -183,13 +204,16 @@ function formatMessageTimeline(messages, registry) {
  * Render the appendSystemContext block from a fetched message list.
  *
  * @param {Object} opts
- * @param {Array}       opts.messages  - result of fetchGroupContext
+ * @param {Array}       opts.messages    - result of fetchGroupContext (may have been
+ *                                        mutated by enrichSendersInPlace prior to this call)
  * @param {BotRegistry} opts.registry
  * @param {string}      opts.chatId
- * @param {Object}      [opts.cfg]     - social.* config (template, adminDisplayName)
+ * @param {Object}      [opts.cfg]       - social.* config (template, adminDisplayName)
+ * @param {string}      [opts.accountId] - feeds the user-name cache cascade in formatMessageTimeline
+ * @param {Object}      [opts.memberCache] - chatMembers prefetch cache (24h TTL); cascade tier 3
  * @returns {string}
  */
-function formatContextBlock({ messages, registry, chatId, cfg = {} }) {
+function formatContextBlock({ messages, registry, chatId, cfg = {}, accountId, memberCache }) {
   const displayBots = registry.getDisplayBots();
   const now         = new Date();
   const timeStr     = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
@@ -210,7 +234,7 @@ function formatContextBlock({ messages, registry, chatId, cfg = {} }) {
       }).join('\n')
     : '  (no bots discovered yet)';
 
-  const timelineStr = formatMessageTimeline(messages, registry);
+  const timelineStr = formatMessageTimeline(messages, registry, { accountId, memberCache });
 
   const members = registry.getMembers ? registry.getMembers() : [];
   const memberMapStr = members.length > 0
@@ -240,11 +264,16 @@ function formatContextBlock({ messages, registry, chatId, cfg = {} }) {
 
 /**
  * 分钟级缓存：同一群同一分钟内，无论触发多少次，只拉一次 API
+ *
+ * Phase 2 加入 inflight 单飞：并发同 chatId 的 computeOnce 调用复用同一个
+ * 进行中的 Promise，防止两条入站消息几乎同时进 Hook 2 时各自打一次 UAT。
+ * 模式参考 index.js:128-149 的 tokenInflight。
  */
 class ContextCache {
   constructor(ttlMs = 60000) {
     this._cache = new Map();
     this._ttlMs = ttlMs;
+    this._inflight = new Map(); // chatId → Promise<value>
   }
 
   _key(chatId) {
@@ -262,6 +291,29 @@ class ContextCache {
       if (Math.floor(Date.now() / this._ttlMs) - ts > 2) this._cache.delete(k);
     }
     this._cache.set(this._key(chatId), value);
+  }
+
+  /**
+   * 单飞读：cache hit 直接返回；inflight 命中 await；都没有则起新 Promise。
+   * fn() 返回 falsy 不写缓存。fn 抛异常时 inflight 删除后重抛给调用方。
+   */
+  async computeOnce(chatId, fn) {
+    const cached = this.get(chatId);
+    if (cached) return cached;
+    const inflight = this._inflight.get(chatId);
+    if (inflight) return inflight;
+
+    const promise = (async () => {
+      try {
+        const value = await fn();
+        if (value) this.set(chatId, value);
+        return value;
+      } finally {
+        this._inflight.delete(chatId);
+      }
+    })();
+    this._inflight.set(chatId, promise);
+    return promise;
   }
 
   // Drop cached entries for chatId immediately after the agent replies, so the

@@ -25,7 +25,9 @@ const { BotRegistry }                                        = require('./regist
 const { fetchGroupContext, formatContextBlock, ContextCache } = require('./context');
 const { StormGuard }                                         = require('./storm-guard');
 const { MemberCache, prefetchChatMembers }                   = require('./member-cache');
+const { fetchAppOwnerOpenId, uatBatchUserNames }             = require('./uat-fetch');
 const { escapeRegExp, makeLogger }                           = require('./utils');
+const { enrichSendersInPlace }                               = require('../../tools/oapi/im/name-resolver.js');
 
 // ── 模块级共享状态 ──────────────────────────────────────────────────────────
 // startup register（含 api.config.channels）写入；后续 per-session register
@@ -55,11 +57,29 @@ const SHARED = {
   // chatId → { senderName, senderAtTag, ts }
   lastBotMention: new Map(),
 
+  // Phase 2: per-chat ticket stash. Hook 1 (`message_received`) writes
+  // {accountId, ts}; Hook 2 (`before_prompt_build`) reads it to drive UAT
+  // enrichment, since `PluginHookAgentContext` carries no accountId.
+  lastChatContext: new Map(),
+
+  // Phase 2: lazy owner resolution per accountId. value === undefined means
+  // "not yet resolved"; value === null means "resolved-but-not-found"; string
+  // is the cached effectiveOwnerOpenId. Resolved via raw fetch to
+  // /application/v6/applications/{appId}, mirroring app-scope-checker.
+  appOwners        : new Map(), // accountId → ownerOpenId | null
+  appOwnersInflight: new Map(), // accountId → Promise<ownerOpenId|null>
+
+  // Phase 2: throttle UAT permission-error warnings. enrich.js:86-95 pattern.
+  permissionErrorNotifiedAt: new Map(), // accountId → ts
+
   // hook 是否已挂到当前 api 的标记（不同 api 对象需各自挂）
   // 因 hooks 是 per-api 的（OpenClaw harness 行为），SHARED 不跟踪
 };
 
 const LAST_MENTION_TTL_MS = 5 * 60 * 1000; // 5 分钟内最近 bot 提及可注入
+const LAST_CHAT_CONTEXT_TTL_MS = 5 * 60 * 1000; // ticket stash 5 分钟超时
+const PERMISSION_ERROR_COOLDOWN_MS = 30 * 60 * 1000; // 30 分钟内同 account 不重复 warn
+const ENRICH_BUDGET_MS = 3000; // 3s wall-clock 防 15s host hook timeout
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 
@@ -153,6 +173,93 @@ async function getTenantToken(accountId = 'default') {
     return await promise;
   } finally {
     SHARED.tokenInflight.delete(accountId);
+  }
+}
+
+// ── Phase 2: owner UAT plumbing ─────────────────────────────────────────────
+
+/**
+ * Resolve the effective owner open_id for an account, cached + single-flight.
+ * Returns null when the account isn't configured or the API call fails — the
+ * caller treats null as "no UAT enrich path available" and skips the pre-pass.
+ */
+async function getOwnerOpenIdForAccount(accountId) {
+  if (!accountId) return null;
+  if (SHARED.appOwners.has(accountId)) return SHARED.appOwners.get(accountId);
+  const inflight = SHARED.appOwnersInflight.get(accountId);
+  if (inflight) return inflight;
+
+  const acct = SHARED.feishuAccounts[accountId];
+  if (!acct?.appId) {
+    SHARED.appOwners.set(accountId, null);
+    return null;
+  }
+
+  const promise = (async () => {
+    const tenantToken = await getTenantToken(accountId);
+    if (!tenantToken) return null;
+    const ownerOpenId = await fetchAppOwnerOpenId({
+      appId      : acct.appId,
+      baseUrl    : SHARED.feishuBase,
+      tenantToken,
+      log        : SHARED.log,
+    });
+    return ownerOpenId ?? null;
+  })();
+  SHARED.appOwnersInflight.set(accountId, promise);
+  try {
+    const v = await promise;
+    SHARED.appOwners.set(accountId, v);
+    return v;
+  } finally {
+    SHARED.appOwnersInflight.delete(accountId);
+  }
+}
+
+/**
+ * Throttled permission-error log — mirrors enrich.js:86-95. Same accountId
+ * within the cooldown window only logs once.
+ */
+function logPermissionErrorOnce(accountId, err, log) {
+  const last = SHARED.permissionErrorNotifiedAt.get(accountId) || 0;
+  if (Date.now() - last < PERMISSION_ERROR_COOLDOWN_MS) return;
+  SHARED.permissionErrorNotifiedAt.set(accountId, Date.now());
+  log?.warn?.(`[before_prompt_build] enrich UAT failed for ${accountId}: ${String(err?.message || err)}`);
+}
+
+/**
+ * Best-effort: enrich human sender names on the just-fetched timeline.
+ * No-op (silent) when ticket stash is missing/expired or owner can't resolve.
+ * Hard-bounded by ENRICH_BUDGET_MS to stay within host's 15s hook timeout.
+ */
+async function maybeEnrichSenders(chatId, messages, log) {
+  const stash = SHARED.lastChatContext.get(chatId);
+  if (!stash || Date.now() - stash.ts >= LAST_CHAT_CONTEXT_TTL_MS) return;
+  const ownerOpenId = await getOwnerOpenIdForAccount(stash.accountId);
+  const acct = SHARED.feishuAccounts[stash.accountId];
+  if (!ownerOpenId || !acct?.appId) return;
+
+  const batchResolve = (openIds) => uatBatchUserNames({
+    appId      : acct.appId,
+    ownerOpenId,
+    openIds,
+    baseUrl    : SHARED.feishuBase,
+    log        : SHARED.log,
+  });
+
+  try {
+    await Promise.race([
+      enrichSendersInPlace({
+        messages,
+        accountId  : stash.accountId,
+        batchResolve,
+        memberCache: SHARED.memberCache,
+        log        : (msg) => SHARED.log?.debug?.(msg),
+      }),
+      new Promise((resolve) => setTimeout(resolve, ENRICH_BUDGET_MS)),
+    ]);
+  } catch (err) {
+    logPermissionErrorOnce(stash.accountId, err, log);
   }
 }
 
@@ -308,6 +415,13 @@ const plugin = {
       // groups (contextGroups), since they support the context-injection feature.
       if (!SHARED.targetGroups.has(chatId)) return;
 
+      // Phase 2: stash accountId so Hook 2 can derive a UAT ticket.
+      // PluginHookAgentContext (Hook 2) carries no accountId, so we have to
+      // capture it here on the inbound side. Refreshed on every inbound.
+      if (ctx?.accountId) {
+        SHARED.lastChatContext.set(chatId, { accountId: ctx.accountId, ts: Date.now() });
+      }
+
       const senderId = ctx?.senderId;
       if (!senderId) return;
 
@@ -364,30 +478,46 @@ const plugin = {
 
       if (!chatId || !SHARED.targetGroups.has(chatId)) return;
 
-      // 缓存命中（同群同分钟内复用）
-      const cached = SHARED.contextCache.get(chatId);
+      // Phase 2: ContextCache.computeOnce 单飞读 — cache hit 直返，inflight 命中
+      // 复用同一 Promise，否则起新 Promise 并 enrich + format。三种路径都 await 同一
+      // baseBlock，避免并发 inbound 同时打 UAT。
       let baseBlock;
-      if (cached) {
-        log.debug(`[before_prompt_build] cache hit for ${chatId}`);
-        baseBlock = cached;
-      } else {
-        try {
+      try {
+        baseBlock = await SHARED.contextCache.computeOnce(chatId, async () => {
           const token = await getTenantToken();
           if (!token) {
             log.warn('[before_prompt_build] no token, skip context');
-            return;
+            return null;
           }
           const messages = await fetchGroupContext(chatId, SHARED.contextCount, token, SHARED.feishuBase);
           log.info(`[before_prompt_build] fetched ${messages.length} msgs from ${chatId}`);
+
+          // Phase 2: UAT enrich pre-pass — best-effort, fully bounded by ENRICH_BUDGET_MS
+          // and silent on auth/permission errors (logPermissionErrorOnce throttles).
+          await maybeEnrichSenders(chatId, messages, log);
+
           SHARED.registry.discoverFromHistory(chatId, token, SHARED.feishuBase).catch(() => {});
-          baseBlock = formatContextBlock({ messages, registry: SHARED.registry, chatId, cfg });
-          SHARED.contextCache.set(chatId, baseBlock);
-        } catch (e) {
-          log.warn(`[before_prompt_build] fetch failed: ${e.message}, degrading`);
-          glog?.warn(`[feishu-social] context fetch failed for ${chatId}: ${e.message}`);
-          return;
-        }
+
+          // accountId 决定 formatMessageTimeline 的 cache cascade。单账号部署
+          // （绝大多数 fork install 的形态）下 stash 缺失就回退到 first account。
+          const stash = SHARED.lastChatContext.get(chatId);
+          const accountId = stash?.accountId ?? Object.keys(SHARED.feishuAccounts)[0];
+
+          return formatContextBlock({
+            messages,
+            registry   : SHARED.registry,
+            chatId,
+            cfg,
+            accountId,
+            memberCache: SHARED.memberCache,
+          });
+        });
+      } catch (e) {
+        log.warn(`[before_prompt_build] fetch failed: ${e.message}, degrading`);
+        glog?.warn(`[feishu-social] context fetch failed for ${chatId}: ${e.message}`);
+        return;
       }
+      if (!baseBlock) return;
 
       // Append the most-recent bot-mention identity hint so the agent knows
       // who triggered this turn (degenerates to empty when no recent mention).
