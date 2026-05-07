@@ -1,76 +1,101 @@
-# OpenClaw Lark/Feishu Plugin
+# @lucien/openclaw-lark-extended
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![npm version](https://img.shields.io/npm/v/@larksuite/openclaw-lark.svg)](https://www.npmjs.com/package/@larksuite/openclaw-lark)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D22-blue.svg)](https://nodejs.org/)
 
-[中文版](./README.zh.md) | English
+> **Community fork**, not the official ByteDance plugin. The upstream is
+> [`@larksuite/openclaw-lark`](https://www.npmjs.com/package/@larksuite/openclaw-lark)
+> ("OpenClaw Lark/Feishu channel plugin"). This fork tracks upstream and adds:
+>
+> 1. **Channel config schema completion** — declares the runtime keys
+>    `spinnerPhrases`, `typingEmoji`, `replyInThread`, `allowBots`,
+>    `threadSession`, and per-group overrides in `openclaw.plugin.json` and
+>    in the runtime zod, where upstream currently leaves the channel schema
+>    empty (`{type: "object"}`).
+> 2. **Optional `feishu-social` extension** — disabled by default; opt in by
+>    setting `social.enabled: true`. Provides group-context injection into
+>    the agent's system prompt, an optional sender-name registry consulted
+>    after upstream's user/bot OAPI fails, and a storm-guard that protects
+>    against bot-to-bot reply loops in multi-bot chats.
+>
+> Both contributions are designed to be upstream-friendly. PRs back to
+> `@larksuite/openclaw-lark` are an explicit goal; until that lands, this
+> fork carries them.
 
-This is the official Lark/Feishu plugin for OpenClaw, developed and maintained by the Lark/Feishu Open Platform team. It seamlessly connects your OpenClaw Agent to your Lark/Feishu workspace, enabling it to directly read from and write to messages, docs, bases, calendars, tasks, and more.
+## Status
 
-## Features
+- Upstream baseline: **`@larksuite/openclaw-lark@2026.5.7`**
+  (force-rebaselined per release; see `CHANGELOG.md`).
+- Fork version: **`0.1.0`** (semver from scratch).
+- Channel id stays **`openclaw-lark`** — installation routes through the
+  same host-level channel registration as upstream. Only the npm package
+  name differs.
 
-This plugin provides comprehensive Lark/Feishu integration for OpenClaw, including:
+## Install
 
-| Category | Capabilities |
-|------|------|
-| 💬 Messenger | Read messages (group/DM history, thread replies), send messages, reply to messages, search messages, download images/files |
-| 📄 Docs | Create, update, and read documents |
-| 📊 Base | Create/manage bases, tables, fields, records (CRUD, batch operations, advanced filtering), views |
-| 📈 Sheets | Create, edit, and view spreadsheets |
-| 📅 Calendar | Manage calendars and events (create/query/update/delete/search), manage attendees, check free/busy status |
-| ✅ Tasks | Manage tasks (create/query/update/complete), manage task lists, subtasks, and comments |
+```bash
+# Via OpenClaw's plugin manager (recommended)
+openclaw plugins install @lucien/openclaw-lark-extended
 
-Additionally, the plugin supports:
-- **📱 Interactive Cards**: Real-time status updates (Thinking/Generating/Complete), plus confirmation buttons for sensitive operations
-- **🌊 Streaming Responses**: Live streaming text directly within message cards
-- **🔒 Permission Policies**: Flexible access control policies for DMs and group chats
-- **⚙️ Advanced Group Configuration**: Per-group settings including allowlists, skill bindings, and custom system prompts
+# Or via npm (the gateway picks it up from the install path)
+npm install -g @lucien/openclaw-lark-extended
+```
 
-## Security & Risk Warnings (Read Before Use)
+Requires:
+- **Node.js** ≥ 22
+- **OpenClaw** ≥ `2026.3.22` (peer dependency, optional)
 
-This plugin integrates with OpenClaw AI automation capabilities and carries inherent risks such as model hallucinations, unpredictable execution, and prompt injection. After you authorize Lark/Feishu permissions, OpenClaw will act under your user identity within the authorized scope, which may lead to high-risk consequences such as leakage of sensitive data or unauthorized operations. Please use with caution.
+See [`INSTALL.md`](./INSTALL.md) for the minimal `openclaw.json` snippet
+and a step-by-step walkthrough including credential setup.
 
-To reduce these risks, the plugin enables default security protections at multiple layers. However, these risks still exist. We strongly recommend that you do not proactively modify any default security settings; once relevant restrictions are relaxed, the risks will increase significantly, and you will bear the consequences.
+## Documentation
 
-We recommend using the Lark/Feishu bot connected to OpenClaw as a private conversational assistant. Do not add it to group chats or allow other users to interact with it, to avoid abuse of permissions or data leakage.
+| Topic | Doc |
+|---|---|
+| First-time install + minimal config | [`INSTALL.md`](./INSTALL.md) |
+| Every channel + plugin config key, defaults, examples | [`CONFIGURATION.md`](./CONFIGURATION.md) |
+| Optional `feishu-social` extension — opt-in, hooks, customization | [`EXTENSIONS.md`](./EXTENSIONS.md) |
+| Migrating from upstream `@larksuite/openclaw-lark` or legacy `feishu-bot-social` | [`MIGRATION.md`](./MIGRATION.md) |
+| Release history relative to upstream | [`CHANGELOG.md`](./CHANGELOG.md) |
+| Sample config snippets | [`examples/`](./examples/) |
 
-Please fully understand all usage risks. By using this plugin, you are deemed to voluntarily assume all related responsibilities.
+## Security & risk warnings
 
+This package integrates with OpenClaw's AI automation capabilities and
+inherits the same risk profile as the upstream plugin:
 
-**Disclaimer:**
+- AI hallucination, unpredictable execution, prompt injection.
+- After Feishu/Lark authorization, OpenClaw acts under your user identity
+  within the granted scope, which can lead to data leakage or unauthorized
+  operations.
 
-This software is licensed under the MIT License. When running, it calls Lark/Feishu Open Platform APIs. To use these APIs, you must comply with the following agreements and privacy policies:
+The default channel config is conservative; `feishu-social` is opt-in and
+disabled by default. Review your `openclaw.json` before deploying to
+shared environments.
 
-- [Feishu Privacy Policy](https://www.feishu.cn/en/privacy?from=openclaw_plugin_readme)
-- [Feishu User Terms of Service](https://www.feishu.cn/en/terms?from=openclaw_plugin_readme)
-- [Feishu Store App Service Provider Security Management Specifications](https://open.larkoffice.com/document/uAjLw4CM/uMzNwEjLzcDMx4yM3ATM/management-practice/app-service-provider-security-management-specifications)
+You are responsible for reviewing the source you run. By using this
+package you accept that responsibility.
 
-- [Lark Privacy Policy](https://www.larksuite.com/user-terms-of-service)
-- [Lark User Terms of Service](https://www.larksuite.com/privacy-policy)
+## Relationship to upstream
 
-## Requirements & Installation
+This fork:
+- Re-baselines `upstream/main` from each upstream npm release (see
+  `CHANGELOG.md`).
+- Carries fork-only changes on `main` until they are upstreamed (or
+  rejected).
+- Is independent of and not endorsed by the upstream maintainers.
 
-Before you start, make sure you have the following:
-
-- **Node.js**: `v22` or higher.
-- **OpenClaw**: OpenClaw is installed and works properly. For details, visit the [OpenClaw official website](https://openclaw.ai).
-
-> **Note**: OpenClaw version must be **2026.2.26** or higher. Check with `openclaw -v`. If below this version, you may encounter issues. Upgrade with:
-> ```bash
-> npm install -g openclaw
-> ```
-
-## Usage Guide
-
-[How to Use the Official Lark/Feishu Plugin for OpenClaw](https://bytedance.larkoffice.com/docx/MFK7dDFLFoVlOGxWCv5cTXKmnMh)
-
-## Contributing
-
-Community contributions are welcome! If you find a bug or have feature suggestions, please submit an [Issue](https://github.com/larksuite/openclaw-larksuite/issues) or a [Pull Request](https://github.com/larksuite/openclaw-larksuite/pulls).
-
-For major changes, we recommend discussing with us first via an Issue.
+If you want the official, upstream-maintained plugin, install
+`@larksuite/openclaw-lark` instead.
 
 ## License
 
-This project is licensed under the **MIT License**. See [LICENSE](./LICENSE.md) for details.
+MIT, inherited from upstream. See [`LICENSE`](./LICENSE).
+
+The upstream plugin is © ByteDance Ltd. and/or its affiliates.
+
+## Feishu/Lark Open Platform terms
+
+When this plugin runs it calls the Lark/Feishu Open Platform APIs. To use
+those APIs you must comply with the Lark/Feishu privacy policies and terms
+of service. See the upstream README for the canonical link list.
