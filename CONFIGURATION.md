@@ -43,7 +43,7 @@ These are upstream's; documented here for completeness.
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `allowBots` | `boolean \| 'mentions'` | `'mentions'` | Bot-sender policy. `true` = allow all; `false` = block; `'mentions'` = group requires @-mention, DM passes. Override per-group via `groups[chatId].allowBots`. |
-| `replyInThread` ⭐ | `boolean \| 'enabled'` | falsy | Force agent replies into a thread for groups. Override per-group via `groups[chatId].replyInThread`. |
+| `replyInThread` ⭐ | `boolean \| 'enabled' \| 'disabled'` | falsy | Force agent replies into a thread for groups. `true` and `'enabled'` enable; `false` and `'disabled'` disable. Override per-group via `groups[chatId].replyInThread`. |
 | `threadSession` | boolean | `false` | When true, each thread maintains its own agent session distinct from the parent chat |
 | `dmPolicy` | enum | `'pairing'` | `'open'`, `'pairing'`, `'allowlist'`, `'disabled'` |
 | `groupPolicy` | enum | `'allowlist'` | `'open'`, `'allowlist'`, `'disabled'` |
@@ -59,7 +59,7 @@ The wildcard key `'*'` applies to every group not explicitly listed.
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `enabled` | boolean | `true` | Disable this specific group |
-| `replyInThread` ⭐ | `boolean \| 'enabled'` | inherits | Override the account-level `replyInThread` |
+| `replyInThread` ⭐ | `boolean \| 'enabled' \| 'disabled'` | inherits | Override the account-level `replyInThread` |
 | `allowBots` | `boolean \| 'mentions'` | inherits | Override the account-level `allowBots` |
 | `groupPolicy` | enum | inherits | Per-group `'open'` / `'allowlist'` / `'disabled'` |
 | `requireMention` | boolean | inherits | |

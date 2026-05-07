@@ -3,7 +3,40 @@
 Release history for `@lucien/openclaw-lark-extended`. Tracks fork-side
 versions; the upstream baseline at each release is noted in parentheses.
 
-## 0.1.0 — initial public release (upstream baseline `@larksuite/openclaw-lark@2026.5.7`)
+## 0.1.1 — schema permissiveness hotfix (upstream baseline `@larksuite/openclaw-lark@2026.5.7`)
+
+Hotfix during the first live cutover (2026-05-07). The 0.1.0 schema declared
+`replyInThread` as `boolean | 'enabled'`, but real-world configs already use
+`'disabled'` to mean "explicitly off" (semantically the same as `false` to the
+runtime, which only checks `=== true || === 'enabled'`). Strict schema
+validation aborted gateway start.
+
+- `openclaw.plugin.json`: `replyInThread` enum extended to `['enabled', 'disabled']`
+  in both account and per-group schema.
+- `src/core/config-schema.js` zod: `ReplyInThreadSchema` becomes
+  `boolean | 'enabled' | 'disabled'`.
+- `src/core/config-schema.d.ts`: matching union update on the named exports.
+- `CONFIGURATION.md`: `replyInThread` row updated to list both string values.
+
+Runtime behavior unchanged — the `resolveReplyInThread` helper still treats
+anything other than `true` / `'enabled'` as falsy (do not force thread).
+
+### Live cutover record (2026-05-07)
+
+- 13:29 PDT — first `bash scripts/deploy.sh` from `lucien/main` (post-rebase
+  onto productionized `main`). Atomic swap succeeded; gateway restart aborted
+  on `replyInThread: 'disabled'` schema validation.
+- 13:31 PDT — schema hotfix above committed (`9770e72` on lucien/main /
+  `6cfe5d1` on main); second `deploy.sh` succeeded. Gateway pid 4410 active,
+  HTTP 200 on `127.0.0.1:18789`.
+- 13:54 / 13:55 PDT canary — DM streaming + group context injection (20 msgs
+  fetched, member-cache prefetch 10 members, registry loaded 8 bots, sender
+  identity correct including `@小K`-style alias resolution and explicit
+  open_id surfacing) all confirmed.
+- Backups: `~/.openclaw/openclaw-lark.bak-20260507T133125` (live tree),
+  `~/.openclaw/openclaw.json.bak-prod-cutover-20260507T132834` (config).
+
+## 0.1.0 — initial release (upstream baseline `@larksuite/openclaw-lark@2026.5.7`)
 
 First release of the fork as a standalone package. All changes below are
 deltas relative to upstream `2026.5.7`.

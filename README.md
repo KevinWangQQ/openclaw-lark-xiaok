@@ -26,22 +26,51 @@
 
 - Upstream baseline: **`@larksuite/openclaw-lark@2026.5.7`**
   (force-rebaselined per release; see `CHANGELOG.md`).
-- Fork version: **`0.1.0`** (semver from scratch).
+- Fork version: **`0.1.1`** (semver from scratch).
+- Distribution: **internal team share via git repo** for now; npm publish
+  is not in scope. See [`STATUS.md`](./STATUS.md) for the current state of
+  the world.
 - Channel id stays **`openclaw-lark`** — installation routes through the
   same host-level channel registration as upstream. Only the npm package
   name differs.
 
 ## Install
 
+### A. Internal team share (current path — git clone)
+
+This fork is not on npm. Clone the repo and point OpenClaw's extension
+loader at the working tree.
+
 ```bash
-# Via OpenClaw's plugin manager (recommended)
+# 1. Clone wherever you keep development repos
+git clone <internal-git-url>/openclaw-lark-extended ~/Projects/openclaw-lark-extended
+cd ~/Projects/openclaw-lark-extended
+git checkout main                                # public-ready branch
+pnpm install                                     # devDeps for tests; optional for runtime
+
+# 2. Point OpenClaw at the working tree (one-time symlink)
+mkdir -p ~/.openclaw/extensions
+ln -sfn ~/Projects/openclaw-lark-extended ~/.openclaw/extensions/openclaw-lark
+
+# 3. Enable in plugins.allow + restart
+#    (channel id is 'openclaw-lark' — same as upstream)
+openclaw gateway restart
+```
+
+### B. Future: published-package install (when this fork ships to npm)
+
+```bash
+# Via OpenClaw's plugin manager
 openclaw plugins install @lucien/openclaw-lark-extended
 
-# Or via npm (the gateway picks it up from the install path)
+# Or via npm
 npm install -g @lucien/openclaw-lark-extended
 ```
 
-Requires:
+This path is not currently active — the package has not been published.
+
+### Prerequisites
+
 - **Node.js** ≥ 22
 - **OpenClaw** ≥ `2026.3.22` (peer dependency, optional)
 
@@ -52,6 +81,7 @@ and a step-by-step walkthrough including credential setup.
 
 | Topic | Doc |
 |---|---|
+| Current project state, branches, deployment record | [`STATUS.md`](./STATUS.md) |
 | First-time install + minimal config | [`INSTALL.md`](./INSTALL.md) |
 | Every channel + plugin config key, defaults, examples | [`CONFIGURATION.md`](./CONFIGURATION.md) |
 | Optional `feishu-social` extension — opt-in, hooks, customization | [`EXTENSIONS.md`](./EXTENSIONS.md) |
