@@ -216,7 +216,9 @@ const plugin = {
   description: '飞书群聊 Bot 社交感知：群上下文注入 / @alias 格式转换 / 防风暴',
 
   register(api) {
-    const cfg  = api.pluginConfig ?? {};
+    // Dual lookup: when wired under openclaw-lark, config lives at .social;
+    // when fbs runs as a discrete plugin, it lives at the root.
+    const cfg  = api.pluginConfig?.social ?? api.pluginConfig ?? {};
     const glog = api.logger;
 
     captureConfigFromApi(api, cfg);
@@ -391,3 +393,9 @@ const plugin = {
 
 module.exports = plugin;
 module.exports.default = plugin;
+
+// Named export consumed by openclaw-lark/index.js register(api) — see Phase 2.2.
+function registerFeishuSocial(api) {
+  return plugin.register(api);
+}
+module.exports.registerFeishuSocial = registerFeishuSocial;

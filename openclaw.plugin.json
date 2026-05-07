@@ -5,7 +5,25 @@
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
-    "properties": {}
+    "properties": {
+      "social": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Configuration for the in-tree feishu-social extension (group context injection, sender awareness, anti-spam). Migrated from the retired feishu-bot-social plugin.",
+        "properties": {
+          "contextGroups":              { "type": "array",   "items": { "type": "string" }, "description": "List of oc_* chat IDs where group context is injected." },
+          "contextMessageCount":        { "type": "number",  "description": "How many recent messages to fetch per group context build (5-100)." },
+          "contextCacheTtlMs":          { "type": "number",  "description": "TTL for the per-chat context cache, in ms. Default 60000." },
+          "stormThreshold":             { "type": "number",  "description": "Bot-inbound count within 30s window that trips storm debounce." },
+          "circuitBreakerMaxOutbound":  { "type": "number",  "description": "Outbound count within 60s window that opens the circuit." },
+          "circuitBreakerSilenceMs":    { "type": "number",  "description": "How long the circuit stays open once tripped." },
+          "alertReceiverOpenId":        { "type": "string",  "description": "Admin open_id; storm-detection DM is sent to this user. Skip DM if unset." },
+          "botOverrides":               { "type": "object", "description": "User-supplied bot metadata overrides keyed by agentId." },
+          "debugLog":                   { "type": "boolean", "description": "Enable verbose social-extension log file under ~/.openclaw/feishu-social/logs/." },
+          "wikiBotsPath":               { "type": "string",  "description": "Path to the user-supplied wiki-bots.json. Defaults to ~/.openclaw/feishu-social/wiki-bots.json." }
+        }
+      }
+    }
   },
   "channelConfigs": {
     "feishu": {
