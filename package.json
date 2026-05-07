@@ -1,7 +1,9 @@
 {
-  "name": "@larksuite/openclaw-lark",
-  "version": "2026.5.7",
-  "description": "OpenClaw Lark/Feishu channel plugin",
+  "name": "@lucien/openclaw-lark-extended",
+  "version": "0.1.0",
+  "description": "Extended fork of @larksuite/openclaw-lark: completes the Feishu channel config schema (spinnerPhrases, typingEmoji, replyInThread, allowBots, threadSession, per-group overrides) and ships an optional opt-in feishu-social extension for group-context injection, sender-name registry, and bot reply-loop guarding.",
+  "license": "MIT",
+  "author": "Lucien",
   "exports": {
     ".": {
       "import": {
@@ -18,9 +20,24 @@
   "files": [
     "**/*"
   ],
+  "keywords": [
+    "openclaw",
+    "feishu",
+    "lark",
+    "channel",
+    "plugin",
+    "fork"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "packageManager": "pnpm@10.32.1",
   "engines": {
     "node": ">=22"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "smoke": "bash scripts/smoke.sh"
   },
   "dependencies": {
     "@larksuiteoapi/node-sdk": "^1.60.0",
@@ -47,7 +64,7 @@
       "selectionLabel": "Lark/Feishu (飞书)",
       "docsPath": "/channels/feishu",
       "docsLabel": "feishu",
-      "blurb": "飞书/Lark enterprise messaging with doc/wiki/drive/task/calendar tools.",
+      "blurb": "Feishu/Lark enterprise messaging with doc/wiki/drive/task/calendar tools (extended fork).",
       "aliases": [
         "lark"
       ],
@@ -55,7 +72,7 @@
       "quickstartAllowFrom": true
     },
     "install": {
-      "npmSpec": "@larksuite/openclaw-lark",
+      "npmSpec": "@lucien/openclaw-lark-extended",
       "localPath": "extensions/feishu",
       "defaultChoice": "npm"
     }
