@@ -179,6 +179,9 @@ const plugin = {
         }, { commands: ['feishu-diagnose'] });
         // Chat commands: /feishu_diagnose, /feishu_doctor, /feishu_auth, /feishu
         (0, index_3.registerCommands)(api);
+        // ---- Feishu Social: group history injection, sender awareness, anti-spam ----
+        const { registerFeishuSocial } = require('./src/extensions/feishu-social/index.js');
+        registerFeishuSocial(api);
         // ---- Multi-account security checks ----
         if (api.config) {
             (0, security_check_1.emitSecurityWarnings)(api.config, api.logger);
