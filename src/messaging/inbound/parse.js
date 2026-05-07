@@ -117,6 +117,10 @@ async function parseMessageEvent(event, botOpenId, expandCtx) {
         resources,
         mentions: mentionList,
         mentionAll,
+        // Per Feishu docs, im.message.receive_v1 sets sender_type to 'user' or
+        // 'bot'. We also accept 'app' defensively for any SDK/legacy variant that
+        // surfaces the older value.
+        senderIsBot: event.sender.sender_type === 'bot' || event.sender.sender_type === 'app',
         createTime: Number.isNaN(createTime) ? undefined : createTime,
         rawMessage: effectiveContent !== event.message.content ? { ...event.message, content: effectiveContent } : event.message,
         rawSender: event.sender,

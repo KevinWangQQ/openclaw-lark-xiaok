@@ -44,18 +44,21 @@ const media_resolver_1 = require("./media-resolver.js");
 async function resolveSenderInfo(params) {
     const { account, log } = params;
     let ctx = params.ctx;
-    // Only resolve display name for real users — the contact API
-    // does not return results for app/bot accounts.
-    if (ctx.rawSender?.sender_type !== 'user') {
-        log(`sender_type is "${ctx.rawSender?.sender_type}", skipping name resolution`);
+    // Bots and users have separate name-resolution endpoints. The contact API
+    // does not return bot info, so dispatch on senderIsBot. Both endpoints
+    // populate the same account-scoped cache (keyed by openId).
+    //
+    // Skip resolution for unknown sender_types (e.g. anonymous, missing) — the
+    // contact API would 4xx and the bot API would not match. This preserves the
+    // pre-bot-support behavior of only resolving names for `sender_type === 'user'`.
+    const senderType = ctx.rawSender?.sender_type;
+    if (!ctx.senderIsBot && senderType !== 'user') {
+        log(`sender_type is "${senderType ?? 'undefined'}", skipping name resolution`);
         return { ctx };
     }
-    // Resolve sender display name (best-effort)
-    const senderResult = await (0, user_name_cache_1.resolveUserName)({
-        account,
-        openId: ctx.senderId,
-        log,
-    });
+    const senderResult = ctx.senderIsBot
+        ? await (0, user_name_cache_1.resolveBotName)({ account, openId: ctx.senderId, log })
+        : await (0, user_name_cache_1.resolveUserName)({ account, openId: ctx.senderId, log });
     if (senderResult.name) {
         ctx = { ...ctx, senderName: senderResult.name };
         log(`sender resolved: ${senderResult.name}`);

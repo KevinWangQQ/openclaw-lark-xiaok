@@ -13,9 +13,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.monitorFeishuProvider = monitorFeishuProvider;
 const accounts_1 = require("../core/accounts.js");
 const lark_client_1 = require("../core/lark-client.js");
-const dedup_1 = require("../messaging/inbound/dedup.js");
 const lark_logger_1 = require("../core/lark-logger.js");
 const shutdown_hooks_1 = require("../core/shutdown-hooks.js");
+const dedup_1 = require("../messaging/inbound/dedup.js");
 const event_handlers_1 = require("./event-handlers.js");
 const mlog = (0, lark_logger_1.larkLogger)('channel/monitor');
 // ---------------------------------------------------------------------------

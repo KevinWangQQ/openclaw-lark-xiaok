@@ -153,4 +153,4 @@ export declare function filterSensitiveScopes(scopes: string[]): string[];
  * 唯一 scope 总数: 74
  * 必需应用权限总数: 20
  * 高敏感权限总数: 4
- */ 
+ */

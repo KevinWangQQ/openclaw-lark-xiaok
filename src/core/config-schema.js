@@ -105,6 +105,7 @@ const DedupSchema = zod_1.z
     maxEntries: zod_1.z.number().optional(), // default 5000
 })
     .optional();
+const AllowBotsSchema = zod_1.z.union([zod_1.z.boolean(), zod_1.z.literal('mentions')]).optional();
 const ReactionNotificationModeSchema = zod_1.z.enum(['off', 'own', 'all']).optional();
 exports.UATConfigSchema = zod_1.z
     .object({
@@ -130,6 +131,7 @@ exports.FeishuGroupSchema = zod_1.z.object({
     enabled: zod_1.z.boolean().optional(),
     allowFrom: AllowFromSchema,
     systemPrompt: zod_1.z.string().optional(),
+    allowBots: AllowBotsSchema,
 });
 // ---------------------------------------------------------------------------
 // Account config schema (same shape as top-level minus `accounts`)
@@ -176,6 +178,7 @@ exports.FeishuAccountConfigSchema = zod_1.z.object({
     dedup: DedupSchema,
     reactionNotifications: ReactionNotificationModeSchema,
     threadSession: zod_1.z.boolean().optional(),
+    allowBots: AllowBotsSchema,
     uat: exports.UATConfigSchema,
 });
 // ---------------------------------------------------------------------------

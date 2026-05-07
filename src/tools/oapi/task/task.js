@@ -324,7 +324,7 @@ function registerFeishuTaskTaskTool(api) {
                                 page_token: p.page_token,
                                 completed: p.completed,
                                 agent_task_status: p.agent_task_status,
-                                user_id_type: (p.user_id_type || 'open_id'),
+                                user_id_type: p.user_id_type || 'open_id',
                             },
                         }, opts), { as: authType });
                         (0, helpers_1.assertLarkOk)(res);
