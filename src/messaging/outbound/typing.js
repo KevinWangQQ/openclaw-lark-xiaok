@@ -17,6 +17,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.addTypingIndicator = addTypingIndicator;
 exports.removeTypingIndicator = removeTypingIndicator;
+exports.getTypingEmojiType = require("./typing-emoji.js").getTypingEmojiType;
 const lark_client_1 = require("../../core/lark-client.js");
 const targets_1 = require("../../core/targets.js");
 const message_unavailable_1 = require("../../core/message-unavailable.js");
@@ -35,11 +36,9 @@ const log = (0, lark_logger_1.larkLogger)('outbound/typing');
 // Read from cfg.channels.feishu.typingEmoji, fallback to 'Get'
 // Single:   channels.feishu.typingEmoji: "Get"
 // Random:   channels.feishu.typingEmoji: "Get,DONE,JIAYI"  ← randomly picks one each time
-function getTypingEmojiType(cfg) {
-    const raw = cfg?.channels?.feishu?.typingEmoji ?? 'Get';
-    const pool = raw.split(',').map(s => s.trim()).filter(Boolean);
-    return pool[Math.floor(Math.random() * pool.length)];
-}
+// Pure logic lives in ./typing-emoji.js so tests can import it without the
+// Lark SDK transitive deps that this file pulls in.
+const getTypingEmojiType = exports.getTypingEmojiType;
 // ---------------------------------------------------------------------------
 // addTypingIndicator
 // ---------------------------------------------------------------------------

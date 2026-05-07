@@ -1,0 +1,11 @@
+node_modules/
+dist/
+*.log
+
+# OpenClaw runtime metadata (only present when this dir is a live install location)
+.omc/
+
+# Common dev artifacts
+.DS_Store
+.idea/
+.vscode/

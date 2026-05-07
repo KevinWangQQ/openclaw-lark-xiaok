@@ -21,6 +21,7 @@ exports.buildCardContent = buildCardContent;
 exports.buildStreamingThinkingCard = buildStreamingThinkingCard;
 exports.buildStreamingPreAnswerCard = buildStreamingPreAnswerCard;
 exports.toCardKit2 = toCardKit2;
+exports.randomSpinnerPhrase = randomSpinnerPhrase;
 const markdown_style_1 = require("./markdown-style.js");
 const tool_use_display_1 = require("./tool-use-display.js");
 // ---------------------------------------------------------------------------

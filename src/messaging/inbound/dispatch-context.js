@@ -13,6 +13,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ensureRuntime = ensureRuntime;
 exports.buildDispatchContext = buildDispatchContext;
 exports.resolveThreadSessionKey = resolveThreadSessionKey;
+exports.resolveReplyInThread = require("./reply-in-thread.js").resolveReplyInThread;
 const routing_1 = require("openclaw/plugin-sdk/routing");
 const lark_client_1 = require("../../core/lark-client.js");
 const lark_logger_1 = require("../../core/lark-logger.js");
@@ -49,14 +50,9 @@ function buildDispatchContext(params) {
     const error = runtime.error;
     const isComment = (0, comment_target_1.isCommentTarget)(ctx.chatId);
     const isGroup = !isComment && ctx.chatType === 'group';
-    // ── Patch 2: per-group replyInThread ──
-    let forceThread = false;
-    if (isGroup) {
-        const feishuCfg = accountScopedCfg?.channels?.feishu || {};
-        const groupCfg = feishuCfg.groups?.[ctx.chatId] || feishuCfg.groups?.['*'] || {};
-        const replyInThreadCfg = groupCfg.replyInThread ?? feishuCfg.replyInThread;
-        forceThread = replyInThreadCfg === true || replyInThreadCfg === 'enabled';
-    }
+    const forceThread = isGroup
+        ? resolveReplyInThread(accountScopedCfg?.channels?.feishu, ctx.chatId)
+        : false;
     const isThread = isGroup && (Boolean(ctx.threadId) || forceThread);
     const core = lark_client_1.LarkClient.runtime;
     const feishuFrom = `feishu:${ctx.senderId}`;
@@ -123,6 +119,12 @@ function buildDispatchContext(params) {
         commandAuthorized: params.commandAuthorized,
     };
 }
+// ---------------------------------------------------------------------------
+// replyInThread resolution (Patch 2)
+// ---------------------------------------------------------------------------
+// Pure logic lives in ./reply-in-thread.js so tests can import it without
+// pulling in this file's Lark SDK transitive deps.
+const resolveReplyInThread = exports.resolveReplyInThread;
 // ---------------------------------------------------------------------------
 // Thread session resolution
 // ---------------------------------------------------------------------------
