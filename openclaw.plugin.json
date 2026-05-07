@@ -96,7 +96,7 @@
           "replyInThread": {
             "oneOf": [
               { "type": "boolean" },
-              { "type": "string", "enum": ["enabled"] }
+              { "type": "string", "enum": ["enabled", "disabled"] }
             ],
             "description": "Force agent replies into a Lark thread for groups. true | 'enabled' enables. Per-group override available via groups[chatId].replyInThread."
           },
@@ -146,7 +146,7 @@
                 "replyInThread": {
                   "oneOf": [
                     { "type": "boolean" },
-                    { "type": "string", "enum": ["enabled"] }
+                    { "type": "string", "enum": ["enabled", "disabled"] }
                   ]
                 }
               }

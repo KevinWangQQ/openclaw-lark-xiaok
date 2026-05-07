@@ -31,7 +31,7 @@ export declare const FeishuGroupSchema: z.ZodObject<{
     allowFrom: z.ZodPipe<z.ZodOptional<z.ZodUnion<readonly [z.ZodString, z.ZodArray<z.ZodString>]>>, z.ZodTransform<string[] | undefined, string | string[] | undefined>>;
     systemPrompt: z.ZodOptional<z.ZodString>;
     allowBots: z.ZodOptional<z.ZodUnion<readonly [z.ZodBoolean, z.ZodLiteral<"mentions">]>>;
-    replyInThread: z.ZodOptional<z.ZodUnion<readonly [z.ZodBoolean, z.ZodLiteral<"enabled">]>>;
+    replyInThread: z.ZodOptional<z.ZodUnion<readonly [z.ZodBoolean, z.ZodLiteral<"enabled">, z.ZodLiteral<"disabled">]>>;
 }, z.core.$strip>;
 export declare const FeishuAccountConfigSchema: z.ZodObject<{
     appId: z.ZodOptional<z.ZodString>;
@@ -174,7 +174,7 @@ export declare const FeishuAccountConfigSchema: z.ZodObject<{
     }>>;
     threadSession: z.ZodOptional<z.ZodBoolean>;
     allowBots: z.ZodOptional<z.ZodUnion<readonly [z.ZodBoolean, z.ZodLiteral<"mentions">]>>;
-    replyInThread: z.ZodOptional<z.ZodUnion<readonly [z.ZodBoolean, z.ZodLiteral<"enabled">]>>;
+    replyInThread: z.ZodOptional<z.ZodUnion<readonly [z.ZodBoolean, z.ZodLiteral<"enabled">, z.ZodLiteral<"disabled">]>>;
     spinnerPhrases: z.ZodOptional<z.ZodArray<z.ZodString>>;
     typingEmoji: z.ZodOptional<z.ZodString>;
     uat: z.ZodOptional<z.ZodObject<{

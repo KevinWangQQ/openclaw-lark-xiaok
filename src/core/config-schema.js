@@ -106,7 +106,7 @@ const DedupSchema = zod_1.z
 })
     .optional();
 const AllowBotsSchema = zod_1.z.union([zod_1.z.boolean(), zod_1.z.literal('mentions')]).optional();
-const ReplyInThreadSchema = zod_1.z.union([zod_1.z.boolean(), zod_1.z.literal('enabled')]).optional();
+const ReplyInThreadSchema = zod_1.z.union([zod_1.z.boolean(), zod_1.z.literal('enabled'), zod_1.z.literal('disabled')]).optional();
 const ReactionNotificationModeSchema = zod_1.z.enum(['off', 'own', 'all']).optional();
 exports.UATConfigSchema = zod_1.z
     .object({
