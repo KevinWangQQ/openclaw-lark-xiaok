@@ -272,13 +272,13 @@ const plugin = {
       if (ctx?.channelId !== 'feishu') return;
       // ctx.conversationId 实际格式：'chat:oc_xxx' (group) / 'user:ou_xxx' (DM) — 需归一化
       const chatId = normalizeConversationId(ctx?.conversationId);
-      if (!chatId || !SHARED.targetGroups.has(chatId)) return;
-      // 仅群消息有意义（chat_id 以 oc_ 起头；DM 是 ou_，不在 targetGroups 内但加保险）
-      if (!chatId.startsWith('oc_')) return;
+      // 仅群消息走下面流程；DM (ou_*) 走单独路径
+      if (!chatId || !chatId.startsWith('oc_')) return;
 
-      // Phase 7: kick off async chat-members prefetch, throttled per-chat.
-      // Populates SHARED.memberCache so lookupMemberName can return display
-      // names without per-message contact API calls.
+      // Phase 7: prefetch chat members for EVERY oc_ group the bot sees,
+      // independent of pluginConfig.contextGroups. Member identity is
+      // tenant-wide; the cache benefits all chats. Throttled per-chat to
+      // bound OAPI traffic.
       if (SHARED.memberCache && SHARED.memberCache.shouldPrefetchChat(chatId)) {
         prefetchChatMembers({
           cache  : SHARED.memberCache,
@@ -287,6 +287,10 @@ const plugin = {
           log    : SHARED.log,
         }).catch(e => SHARED.log?.warn(`[member-cache] prefetch threw: ${e.message}`));
       }
+
+      // Below: storm guard + lastBotMention only fire for explicitly-tracked
+      // groups (contextGroups), since they support the context-injection feature.
+      if (!SHARED.targetGroups.has(chatId)) return;
 
       const senderId = ctx?.senderId;
       if (!senderId) return;
