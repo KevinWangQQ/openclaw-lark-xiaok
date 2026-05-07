@@ -107,7 +107,12 @@ class StreamingCardController {
             const candidateKeys = fallbackKey !== key ? [key, fallbackKey] : [key];
             const sessionApi = runtime.agent?.session;
             if (sessionApi?.resolveStorePath && sessionApi?.loadSessionStore) {
-                const storePath = sessionApi.resolveStorePath(sessionStorePath);
+                let storePath = sessionApi.resolveStorePath(sessionStorePath);
+                // ── Patch 4b: fix store path using agent ID from session key ──
+                const agentIdMatch = key.match(/^agent:([^:]+):/);
+                if (agentIdMatch && storePath.includes('/agents/main/')) {
+                    storePath = storePath.replace('/agents/main/', `/agents/${agentIdMatch[1]}/`);
+                }
                 const store = sessionApi.loadSessionStore(storePath);
                 let entry;
                 let matchedKey;
@@ -150,7 +155,12 @@ class StreamingCardController {
             if (!channelSession?.resolveStorePath) {
                 return undefined;
             }
-            const storePath = channelSession.resolveStorePath(sessionStorePath);
+            let storePath = channelSession.resolveStorePath(sessionStorePath);
+                // ── Patch 4b: fix store path for channel session fallback ──
+                const agentIdMatch2 = key.match(/^agent:([^:]+):/);
+                if (agentIdMatch2 && storePath.includes('/agents/main/')) {
+                    storePath = storePath.replace('/agents/main/', `/agents/${agentIdMatch2[1]}/`);
+                }
             const raw = await (0, promises_1.readFile)(storePath, 'utf8');
             const parsed = JSON.parse(raw);
             const store = parsed && typeof parsed === 'object' && !Array.isArray(parsed)
