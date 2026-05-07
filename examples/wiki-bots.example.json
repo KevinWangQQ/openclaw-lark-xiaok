@@ -1,0 +1,21 @@
+{
+  "_note": "Placeholder schema. Real production data lives at ~/.openclaw/feishu-social/wiki-bots.json (user-scope, gitignored). Copy this file there and fill in your bot/member entries.",
+  "bots": {
+    "agent-id-here": {
+      "agentId": "agent-id-here",
+      "name": "Agent Name",
+      "emoji": "🤖",
+      "openId": "ou_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "appId": "cli_xxxxxxxxxxxxxxxxxxxx",
+      "owner": { "name": "Owner Name", "openId": "ou_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" },
+      "aliases": ["alias1", "alias2"]
+    }
+  },
+  "members": {
+    "ou_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": {
+      "openId": "ou_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "name": "Person Name",
+      "aliases": ["nickname1"]
+    }
+  }
+}
