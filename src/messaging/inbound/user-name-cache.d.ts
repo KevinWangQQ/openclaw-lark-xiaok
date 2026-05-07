@@ -42,6 +42,18 @@ export interface ResolveUserNameResult {
     permissionError?: PermissionError;
 }
 /**
+ * Resolve a single bot's display name via `/open-apis/bot/v3/bots/basic_batch`.
+ *
+ * Bots are not returned by the contact API, so they have their own endpoint.
+ * Names share the same account-scoped cache (keyed by openId) since both
+ * bots and users have `ou_` prefixed openIds and a single display name.
+ */
+export declare function resolveBotName(params: {
+    account: LarkAccount;
+    openId: string;
+    log: (...args: unknown[]) => void;
+}): Promise<ResolveUserNameResult>;
+/**
  * Resolve a single user's display name.
  *
  * Checks the account-scoped cache first, then falls back to the

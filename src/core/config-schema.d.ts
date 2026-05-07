@@ -30,6 +30,7 @@ export declare const FeishuGroupSchema: z.ZodObject<{
     enabled: z.ZodOptional<z.ZodBoolean>;
     allowFrom: z.ZodPipe<z.ZodOptional<z.ZodUnion<readonly [z.ZodString, z.ZodArray<z.ZodString>]>>, z.ZodTransform<string[] | undefined, string | string[] | undefined>>;
     systemPrompt: z.ZodOptional<z.ZodString>;
+    allowBots: z.ZodOptional<z.ZodUnion<readonly [z.ZodBoolean, z.ZodLiteral<"mentions">]>>;
 }, z.core.$strip>;
 export declare const FeishuAccountConfigSchema: z.ZodObject<{
     appId: z.ZodOptional<z.ZodString>;
@@ -76,6 +77,7 @@ export declare const FeishuAccountConfigSchema: z.ZodObject<{
         enabled: z.ZodOptional<z.ZodBoolean>;
         allowFrom: z.ZodPipe<z.ZodOptional<z.ZodUnion<readonly [z.ZodString, z.ZodArray<z.ZodString>]>>, z.ZodTransform<string[] | undefined, string | string[] | undefined>>;
         systemPrompt: z.ZodOptional<z.ZodString>;
+        allowBots: z.ZodOptional<z.ZodUnion<readonly [z.ZodBoolean, z.ZodLiteral<"mentions">]>>;
     }, z.core.$strip>>>;
     historyLimit: z.ZodOptional<z.ZodNumber>;
     dmHistoryLimit: z.ZodOptional<z.ZodNumber>;
@@ -170,6 +172,7 @@ export declare const FeishuAccountConfigSchema: z.ZodObject<{
         all: "all";
     }>>;
     threadSession: z.ZodOptional<z.ZodBoolean>;
+    allowBots: z.ZodOptional<z.ZodUnion<readonly [z.ZodBoolean, z.ZodLiteral<"mentions">]>>;
     uat: z.ZodOptional<z.ZodObject<{
         enabled: z.ZodOptional<z.ZodBoolean>;
         allowedScopes: z.ZodOptional<z.ZodArray<z.ZodString>>;
@@ -221,6 +224,7 @@ export declare const FeishuConfigSchema: z.ZodObject<{
         enabled: z.ZodOptional<z.ZodBoolean>;
         allowFrom: z.ZodPipe<z.ZodOptional<z.ZodUnion<readonly [z.ZodString, z.ZodArray<z.ZodString>]>>, z.ZodTransform<string[] | undefined, string | string[] | undefined>>;
         systemPrompt: z.ZodOptional<z.ZodString>;
+        allowBots: z.ZodOptional<z.ZodUnion<readonly [z.ZodBoolean, z.ZodLiteral<"mentions">]>>;
     }, z.core.$strip>>>;
     historyLimit: z.ZodOptional<z.ZodNumber>;
     dmHistoryLimit: z.ZodOptional<z.ZodNumber>;
@@ -315,6 +319,7 @@ export declare const FeishuConfigSchema: z.ZodObject<{
         all: "all";
     }>>;
     threadSession: z.ZodOptional<z.ZodBoolean>;
+    allowBots: z.ZodOptional<z.ZodUnion<readonly [z.ZodBoolean, z.ZodLiteral<"mentions">]>>;
     uat: z.ZodOptional<z.ZodObject<{
         enabled: z.ZodOptional<z.ZodBoolean>;
         allowedScopes: z.ZodOptional<z.ZodArray<z.ZodString>>;
@@ -365,6 +370,7 @@ export declare const FeishuConfigSchema: z.ZodObject<{
             enabled: z.ZodOptional<z.ZodBoolean>;
             allowFrom: z.ZodPipe<z.ZodOptional<z.ZodUnion<readonly [z.ZodString, z.ZodArray<z.ZodString>]>>, z.ZodTransform<string[] | undefined, string | string[] | undefined>>;
             systemPrompt: z.ZodOptional<z.ZodString>;
+            allowBots: z.ZodOptional<z.ZodUnion<readonly [z.ZodBoolean, z.ZodLiteral<"mentions">]>>;
         }, z.core.$strip>>>;
         historyLimit: z.ZodOptional<z.ZodNumber>;
         dmHistoryLimit: z.ZodOptional<z.ZodNumber>;
@@ -459,6 +465,7 @@ export declare const FeishuConfigSchema: z.ZodObject<{
             all: "all";
         }>>;
         threadSession: z.ZodOptional<z.ZodBoolean>;
+        allowBots: z.ZodOptional<z.ZodUnion<readonly [z.ZodBoolean, z.ZodLiteral<"mentions">]>>;
         uat: z.ZodOptional<z.ZodObject<{
             enabled: z.ZodOptional<z.ZodBoolean>;
             allowedScopes: z.ZodOptional<z.ZodArray<z.ZodString>>;
