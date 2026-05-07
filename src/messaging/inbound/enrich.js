@@ -63,6 +63,22 @@ async function resolveSenderInfo(params) {
     else if (senderResult.permissionError) {
         log(`sender resolve failed: permission error code=${senderResult.permissionError.code}`);
     }
+    // When OAPI returned no name (missing permission, empty cache, unknown user),
+    // consult the in-tree feishu-social member registry sourced from
+    // ~/.openclaw/feishu-social/wiki-bots.json. This is the curated authoritative
+    // mapping for this tenant — it's the whole reason the social extension exists.
+    if (!ctx.senderName && ctx.senderId) {
+        try {
+            const social = require('../../extensions/feishu-social/index.js');
+            const localName = social.lookupMemberName?.(ctx.senderId);
+            if (localName) {
+                ctx = { ...ctx, senderName: localName };
+                log(`sender resolved via feishu-social registry: ${localName}`);
+            }
+        } catch (_) {
+            // social extension not loaded — keep ctx.senderName undefined
+        }
+    }
     // Track permission errors (with cooldown)
     let permissionError;
     if (senderResult.permissionError) {

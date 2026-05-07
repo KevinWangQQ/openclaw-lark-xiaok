@@ -403,3 +403,14 @@ function registerFeishuSocial(api) {
   return plugin.register(api);
 }
 module.exports.registerFeishuSocial = registerFeishuSocial;
+
+// Local member-name lookup: openclaw-lark's enrich.js consults this when the
+// contact OAPI returns no display name (missing permission, cache miss, etc.),
+// so ctx.senderName lands as the human-readable name from wiki-bots.json
+// instead of being left undefined and falling through to the open_id.
+function lookupMemberName(openId) {
+  if (!openId || !SHARED.registry) return null;
+  const member = SHARED.registry.findMemberByOpenId?.(openId);
+  return member?.name || null;
+}
+module.exports.lookupMemberName = lookupMemberName;
