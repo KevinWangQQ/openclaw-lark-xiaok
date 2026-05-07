@@ -16,6 +16,7 @@ exports.StreamingCardController = void 0;
 exports.prepareTerminalCardContent = prepareTerminalCardContent;
 const promises_1 = require("node:fs/promises");
 const agent_runtime_1 = require("openclaw/plugin-sdk/agent-runtime");
+const agent_config_1 = require("../core/agent-config.js");
 const reply_runtime_1 = require("openclaw/plugin-sdk/reply-runtime");
 const api_error_1 = require("../core/api-error.js");
 const lark_logger_1 = require("../core/lark-logger.js");
@@ -752,7 +753,7 @@ class StreamingCardController {
                     // Step 1: Create card entity
                     const cId = await (0, cardkit_1.createCardEntity)({
                         cfg: this.deps.cfg,
-                        card: (0, builder_1.buildStreamingThinkingCard)(this.deps.toolUseDisplay.showToolUse),
+                        card: (0, builder_1.buildStreamingThinkingCard)(this.deps.toolUseDisplay.showToolUse, this.deps.cfg?.channels?.feishu?.spinnerStyle),
                         accountId: this.deps.accountId,
                     });
                     if (this.isStaleCreate(epoch)) {
@@ -971,10 +972,13 @@ class StreamingCardController {
             return;
         try {
             const display = this.computeToolUseDisplay();
-            const card = (0, builder_1.buildStreamingPreAnswerCard)({
+            // ── Patch 5: read spinnerStyle from cfg for phrase routing ──
+                const _spinnerStyle = this.deps.cfg?.channels?.feishu?.spinnerStyle;
+                const card = (0, builder_1.buildStreamingPreAnswerCard)({
                 steps: display?.steps,
                 elapsedMs: this.visibleToolUseElapsedMs,
                 showToolUse: this.shouldDisplayToolUse,
+                spinnerStyle: _spinnerStyle,
             });
             this.cardKit.cardKitSequence += 1;
             await (0, cardkit_1.updateCardKitCard)({

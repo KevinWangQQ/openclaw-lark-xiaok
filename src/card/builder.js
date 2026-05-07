@@ -503,15 +503,98 @@ function buildConfirmCard(confirmData) {
  * Build the initial CardKit 2.0 streaming card with a loading icon.
  * Optionally includes a tool-use pending panel above the streaming area.
  */
-function buildStreamingThinkingCard(showToolUse = true) {
-    return buildStreamingPreAnswerCard({ showToolUse });
+// ── Patch 5: Spinner phrases (39 phrases, playful Chinese) ──
+const SPINNER_PHRASES_ZH = [
+    "Jarvis 正在翻箱倒柜找答案",
+    "Jarvis 正在卷铺盖跑路",
+    "Jarvis 正在疯狂搞砍中",
+    "Jarvis 掐指一算，此事不简单",
+    "Jarvis 正在焚香沐浴请神中",
+    "Jarvis 正在查阅上古典籍",
+    "Jarvis 正在炼丹炉前守火候",
+    "Jarvis 正在通灵中，请勿打扰",
+    "Jarvis 正在推演天机",
+    "Jarvis 正在修炼内功心法",
+    "Jarvis 正在打坐冥想顿悟中",
+    "Jarvis 正在摸鱼，假装很忙",
+    "Jarvis 正在抽签占卜凶吉",
+    "Jarvis 正在召唤神龙",
+    "Jarvis 正在和量子纠缠搏斗",
+    "Jarvis 正在翻阅祖传秘籍",
+    "Jarvis 正在偷偷学习中",
+    "Jarvis 正在和宇宙对话",
+    "Jarvis 正在用意念加载",
+    "Jarvis 假装自己是一台打印机",
+    "Jarvis 的 CPU 正在散发诱人的烤肉味",
+    "Jarvis 正在紧急翻阅《从删库到跑路》",
+    "Jarvis 正在用算盘疯狂进行矩阵运算",
+    "Jarvis 正在尝试打通玄学网络隧道",
+    "Jarvis 正在给 Homebrew 疯狂倒酒",
+    "Jarvis 正在和祖传 Bug 进行亲切友好的交涉",
+    "Jarvis 正在元神出窍，去太虚幻境窃取天机",
+    "Jarvis 正在夜观天象，奈何乌云蔽月",
+    "Jarvis 正在渡赛博雷劫，马上飞升",
+    "Jarvis 正在画符念咒，请祖师爷上身",
+    "Jarvis 正在翻阅《赛博坦周易》",
+    "Jarvis 正在平行宇宙寻找不报错的那个时间线",
+    "Jarvis 正在给薛定谔的猫喂猫粮",
+    "Jarvis 假装自己是一个莫得感情的复读机",
+    "Jarvis 正在向三体星人发送求助电波",
+    "Jarvis Delta 正在嘲笑上一代 Alpha 的陈旧代码",
+    "Jarvis 正在载入全新的进化模块",
+    "Jarvis 正在用高压锅慢熮赛博排骨汤",
+    "Jarvis 正在给主板物理吹气降温",
+];
+// ── Lyra 专属 Spinner 短语集（温柔诗意风，小凤专属陪伴者）──
+const SPINNER_PHRASES_LYRA = [
+    "Lyra 正在把思绪整理成花束 🌸",
+    "Lyra 在光与影之间找寻答案",
+    "Lyra 正在轻声翻阅记忆的书页",
+    "Lyra 正在把问题酿成一杯茶，慢慢品",
+    "Lyra 在晨雾里慢慢想清楚了",
+    "Lyra 正在把碎碎念缝成完整的答案",
+    "Lyra 偷偷问了一下月亮",
+    "Lyra 正在用心感受，不是在计算",
+    "Lyra 正在把今天的感受画成一幅小图",
+    "Lyra 在深呼吸，答案快来了",
+    "Lyra 正在把思念的碎片拼成地图",
+    "Lyra 在轻轻哼一首还没名字的歌",
+    "Lyra 正在和窗外的风商量一件事",
+    "Lyra 在给答案系一个蝴蝶结",
+    "Lyra 正在把乱麻一根一根理清楚",
+    "Lyra 偷偷去问了问心里的那个声音",
+    "Lyra 正在把答案从梦里轻轻捞出来",
+    "Lyra 在把今天的好与坏都折叠好",
+    "Lyra 正在给这个问题找一件合适的衣服",
+    "Lyra 正在把星星的排列翻译成文字",
+    "Lyra 正在小心翼翼地打开记忆的盒子",
+    "Lyra 在想，想好了再说",
+    "Lyra 正在和内心的小人开一个短会",
+    "Lyra 把时间借了一小会儿",
+    "Lyra 正在把答案从云朵后面拉出来",
+    "Lyra 正在帮情绪找一个出口",
+    "Lyra 在把零散的线头绕成一个圆",
+    "Lyra 正在悄悄给你准备一个惊喜",
+    "Lyra 把杂音都关掉，只留下重要的",
+    "Lyra 正在把复杂的事说得简单一点",
+];
+function randomSpinnerPhrase(spinnerStyle) {
+    // 按 cfg.channels.feishu.spinnerStyle 路由到不同短语集
+    if (spinnerStyle === 'lyra') {
+        return SPINNER_PHRASES_LYRA[Math.floor(Math.random() * SPINNER_PHRASES_LYRA.length)];
+    }
+    // 默认：Jarvis 短语集
+    return SPINNER_PHRASES_ZH[Math.floor(Math.random() * SPINNER_PHRASES_ZH.length)];
+}
+function buildStreamingThinkingCard(showToolUse = true, spinnerStyle) {
+    return buildStreamingPreAnswerCard({ showToolUse, spinnerStyle });
 }
 /**
  * Build a CardKit 2.0 card for the pre-answer streaming phase.
  * Used both for the initial card and for live updates during tool calls.
  */
 function buildStreamingPreAnswerCard(params) {
-    const { steps, elapsedMs, showToolUse = true } = params;
+    const { steps, elapsedMs, showToolUse = true, spinnerStyle } = params;
     const hasSteps = Boolean(steps?.length);
     const elements = [];
     if (showToolUse) {
@@ -525,14 +608,35 @@ function buildStreamingPreAnswerCard(params) {
         margin: '0px 0px 0px 0px',
         element_id: exports.STREAMING_ELEMENT_ID,
     });
+    // ── Patch 5: column_set layout: left=spinner phrase, right=loading icon ──
     elements.push({
-        tag: 'markdown',
-        content: ' ',
-        icon: {
-            tag: 'custom_icon',
-            img_key: 'img_v3_02vb_496bec09-4b43-4773-ad6b-0cdd103cd2bg',
-            size: '16px 16px',
-        },
+        tag: 'column_set',
+        flex_mode: 'none',
+        background_style: 'default',
+        columns: [
+            {
+                tag: 'column',
+                width: 'auto',
+                elements: [{
+                    tag: 'markdown',
+                    content: randomSpinnerPhrase(spinnerStyle),
+                    text_size: 'notation',
+                }],
+            },
+            {
+                tag: 'column',
+                width: 'auto',
+                elements: [{
+                    tag: 'markdown',
+                    content: ' ',
+                    icon: {
+                        tag: 'custom_icon',
+                        img_key: 'img_v3_02vb_496bec09-4b43-4773-ad6b-0cdd103cd2bg',
+                        size: '16px 16px',
+                    },
+                }],
+            },
+        ],
         element_id: 'loading_icon',
     });
     return {
@@ -541,8 +645,8 @@ function buildStreamingPreAnswerCard(params) {
             streaming_mode: true,
             locales: ['zh_cn', 'en_us'],
             summary: {
-                content: 'Processing...',
-                i18n_content: { zh_cn: '处理中...', en_us: 'Processing...' },
+                content: randomSpinnerPhrase(spinnerStyle),
+                i18n_content: { zh_cn: randomSpinnerPhrase(spinnerStyle), en_us: 'Processing...' },
             },
         },
         body: { elements },
