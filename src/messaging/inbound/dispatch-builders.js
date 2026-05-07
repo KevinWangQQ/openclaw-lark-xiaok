@@ -55,7 +55,14 @@ function buildMessageBody(ctx, quotedContent) {
         messageBody = `[Replying to: "${quotedContent}"]\n\n${ctx.content}`;
     }
     const speaker = ctx.senderName ?? ctx.senderId;
-    messageBody = `${speaker}: ${messageBody}`;
+    // Group turns get a stable [name](open_id) prefix so the agent can disambiguate
+    // multi-sender conversations; DM keeps the cleaner "name: msg" form
+    // (fork plan §4 #5, sender-labeling site B).
+    if (ctx.chatType === 'group' && ctx.senderId) {
+        messageBody = `[${speaker}](${ctx.senderId}): ${messageBody}`;
+    } else {
+        messageBody = `${speaker}: ${messageBody}`;
+    }
     const mentionAnnotation = buildMentionAnnotation(ctx);
     if (mentionAnnotation) {
         messageBody += `\n\n${mentionAnnotation}`;

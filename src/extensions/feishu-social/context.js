@@ -140,7 +140,10 @@ function formatMessageTimeline(messages, registry) {
       senderName = m?.name || `用户(${senderId.slice(-8)})`;
     }
 
-    return `${timeStr} | ${senderName} | ${buildExcerpt(item)}`;
+    // Sender label: [name](open_id:<last-8>) keeps history rows skimmable while
+    // still giving the agent a stable identifier per speaker (fork plan §4 #5).
+    const idTag = senderId ? `open_id:${senderId.slice(-8)}` : 'unknown';
+    return `${timeStr} [${senderName}](${idTag}): ${buildExcerpt(item)}`;
   }).join('\n');
 }
 
