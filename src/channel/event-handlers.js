@@ -366,12 +366,24 @@ async function handleCardActionEvent(ctx, data) {
         const action = data.action || {};
         const actionValue = { ...(action.value || {}), ...(action.form_value || {}) };
         if (action.tag) actionValue._action_tag = action.tag;
-        if (!actionValue._action_name && action.value?._action_name) {
-            actionValue._action_name = action.value._action_name;
+        // _action_name resolution chain: card-author may have placed the button
+        // identifier in any of three spots. Try each in priority order so the
+        // agent always receives a usable identifier (observed: when the card
+        // author sets <button name="btn_done">, Feishu places it at action.name,
+        // not action.value._action_name — Patch 1 used to miss this and the
+        // agent saw only _action_tag:"button" with no way to dispatch).
+        if (!actionValue._action_name) {
+            actionValue._action_name = action.value?._action_name
+                                    || action.name
+                                    || action.form_value?._action_name
+                                    || undefined;
         }
         const chatId = data.open_chat_id || data.context?.open_chat_id || '';
         const msgId = data.open_message_id || data.context?.open_message_id || '';
         elog.info(`Non-OAuth card action from ${openId} in ${chatId}: ${JSON.stringify(actionValue)}`);
+        // Raw event dump for debugging future card-action shape regressions.
+        // Kept at debug level so it doesn't bloat info logs in steady state.
+        elog.debug?.(`raw card.action.trigger payload: ${JSON.stringify(data)}`);
         const syntheticEvent = {
             // sender_type:'user' is required so resolveSenderInfo (enrich.js:49)
             // doesn't early-return with "skipping name resolution" — without this,
