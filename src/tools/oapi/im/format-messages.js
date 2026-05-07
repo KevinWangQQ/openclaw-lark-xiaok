@@ -15,7 +15,7 @@ exports.formatMessageItem = formatMessageItem;
 exports.formatMessageList = formatMessageList;
 const lark_logger_1 = require("../../../core/lark-logger.js");
 const content_converter_1 = require("../../../messaging/converters/content-converter.js");
-const user_name_uat_1 = require("./user-name-uat.js");
+const name_resolver_1 = require("./name-resolver.js");
 const time_utils_1 = require("./time-utils.js");
 const log = (0, lark_logger_1.larkLogger)('oapi/im/format-messages');
 // ---------------------------------------------------------------------------
@@ -126,42 +126,28 @@ async function formatMessageItem(item, accountId, nameResolver, ctxOverrides) {
  */
 async function formatMessageList(items, account, log, client) {
     const accountId = account.accountId;
-    const nameResolver = (openId) => (0, user_name_uat_1.getUATUserName)(accountId, openId);
-    // 1. 把 mention 自带的名字写入 UAT 缓存（免费信息）
-    const mentionNames = new Map();
-    for (const item of items) {
-        for (const m of item.mentions ?? []) {
-            const openId = (0, content_converter_1.extractMentionOpenId)(m.id);
-            if (openId && m.name) {
-                mentionNames.set(openId, m.name);
-            }
-        }
-    }
-    if (mentionNames.size > 0) {
-        (0, user_name_uat_1.setUATUserNames)(accountId, mentionNames);
-    }
+    const nameResolver = (openId) => (0, name_resolver_1.resolveUserName)(accountId, openId);
+    // 1. 把 mention 自带的名字写入共享 user-name 缓存（免费信息，TTL 同 inbound 一致）
+    (0, name_resolver_1.prefillUserNamesFromMentions)(accountId, items);
     // 2. 收集所有 user 类型 sender 的 open_id
     const senderIds = [
         ...new Set(items
             .map((item) => (item.sender?.sender_type === 'user' ? item.sender.id : undefined))
             .filter((id) => !!id)),
     ];
-    // 3. 批量解析 UAT 缓存中缺失的名字
+    // 3. 批量解析缓存中缺失的名字（resolver 内部去重 + 命中跳过 + '' 哨兵抑制重试）
     if (senderIds.length > 0) {
-        const missing = senderIds.filter((id) => (0, user_name_uat_1.getUATUserName)(accountId, id) === undefined);
-        if (missing.length > 0) {
-            await (0, user_name_uat_1.batchResolveUserNamesAsUser)({ client, openIds: missing, log });
-        }
+        await (0, name_resolver_1.batchResolveUserNames)({ client, accountId, openIds: senderIds, log });
     }
     // 4. 构建 merge_forward 展开所需的回调
-    const uatBatchResolve = async (openIds) => {
-        await (0, user_name_uat_1.batchResolveUserNamesAsUser)({ client, openIds, log });
+    const batchResolveCallback = async (openIds) => {
+        await (0, name_resolver_1.batchResolveUserNames)({ client, accountId, openIds, log });
     };
     const ctxOverrides = {
         account,
         accountId,
         resolveUserName: nameResolver,
-        batchResolveNames: uatBatchResolve,
+        batchResolveNames: batchResolveCallback,
         fetchSubMessages: createUATFetchSubMessages(client),
     };
     // 5. 逐条格式化

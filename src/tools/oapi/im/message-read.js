@@ -17,7 +17,7 @@ const typebox_1 = require("@sinclair/typebox");
 const helpers_1 = require("../helpers.js");
 const time_utils_1 = require("./time-utils.js");
 const format_messages_1 = require("./format-messages.js");
-const user_name_uat_1 = require("./user-name-uat.js");
+const name_resolver_1 = require("./name-resolver.js");
 // ===========================================================================
 // Shared helpers
 // ===========================================================================
@@ -253,43 +253,6 @@ function buildSearchData(p, time) {
         data.chat_type = p.chat_type === 'group' ? 'group_chat' : 'p2p_chat';
     return data;
 }
-async function fetchChatContexts(client, chatIds, logInfo, logWarn) {
-    const map = new Map();
-    if (chatIds.length === 0)
-        return map;
-    try {
-        logInfo(`batch_query: requesting ${chatIds.length} chat_ids: ${chatIds.join(', ')}`);
-        const res = await client.invokeByPath('feishu_im_user_search_messages.default', '/open-apis/im/v1/chats/batch_query', {
-            method: 'POST',
-            body: { chat_ids: chatIds },
-            query: { user_id_type: 'open_id' },
-            as: 'user',
-        });
-        logInfo(`batch_query: response code=${res.code}, msg=${res.msg}, items=${res.data?.items?.length ?? 0}`);
-        if (res.code !== 0) {
-            logWarn(`batch_query: API returned error code=${res.code}, msg=${res.msg}`);
-        }
-        for (const c of res.data?.items ?? []) {
-            if (c.chat_id) {
-                map.set(c.chat_id, {
-                    name: c.name ?? '',
-                    chat_mode: c.chat_mode ?? '',
-                    p2p_target_id: c.p2p_target_id,
-                });
-            }
-        }
-    }
-    catch (err) {
-        logInfo(`batch_query chats failed, skipping: ${err}`);
-    }
-    return map;
-}
-async function resolveP2PTargetNames(chatMap, client, logFn) {
-    const ids = [...new Set([...chatMap.values()].map((c) => c.p2p_target_id).filter((id) => !!id))];
-    if (ids.length > 0) {
-        await (0, user_name_uat_1.batchResolveUserNamesAsUser)({ client, openIds: ids, log: logFn });
-    }
-}
 function enrichMessages(messages, items, chatMap, nameResolver) {
     return messages.map((msg, idx) => {
         const chatId = items[idx]?.chat_id;
@@ -385,16 +348,21 @@ function registerSearchMessages(api) {
                 const chatIds = [
                     ...new Set(items.map((i) => i.chat_id).filter(Boolean)),
                 ];
-                const chatMap = await fetchChatContexts(client, chatIds, log.info, log.warn);
+                // batchResolveChatNames 同时缓存 chat info 并预热 p2p target user name，
+                // 替换原来 fetchChatContexts + resolveP2PTargetNames 两步串行调用。
+                const chatMap = await (0, name_resolver_1.batchResolveChatNames)({
+                    client,
+                    accountId: account.accountId,
+                    chatIds,
+                    log: logFn,
+                });
                 const p2pChats = [...chatMap.entries()].filter(([, v]) => v.chat_mode === 'p2p');
                 log.info(`chats: ${chatMap.size}/${chatIds.length} resolved, p2p=${p2pChats.length}`);
-                // 4. 格式化消息（填充 sender 名字缓存，使用 UAT）
+                // 4. 格式化消息（填充 sender 名字到合并缓存，使用 UAT）
                 const messages = await (0, format_messages_1.formatMessageList)(items, account, logFn, client);
-                // 5. 解析 p2p 对方用户名（使用 UAT）
-                await resolveP2PTargetNames(chatMap, client, logFn);
-                // 6. 拼装返回
-                const uatNameResolver = (id) => (0, user_name_uat_1.getUATUserName)(account.accountId, id);
-                const result = enrichMessages(messages, items, chatMap, uatNameResolver);
+                // 5. 拼装返回（p2p target name 已经被 batchResolveChatNames 写入缓存）
+                const nameResolver = (id) => (0, name_resolver_1.resolveUserName)(account.accountId, id);
+                const result = enrichMessages(messages, items, chatMap, nameResolver);
                 log.info(`result: ${result.length} messages, has_more=${hasMore}`);
                 return (0, helpers_1.json)({ messages: result, has_more: hasMore, page_token: pageToken });
             }

@@ -17,6 +17,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerChatSearchTool = registerChatSearchTool;
 const typebox_1 = require("@sinclair/typebox");
 const helpers_1 = require("../helpers.js");
+const name_resolver_1 = require("../im/name-resolver.js");
 // ---------------------------------------------------------------------------
 // Schema
 // ---------------------------------------------------------------------------
@@ -113,8 +114,27 @@ function registerChatSearchTool(api) {
                         }), { as: 'user' });
                         (0, helpers_1.assertLarkOk)(res);
                         log.info(`get: retrieved chat info for ${p.chat_id}`);
+                        const data = res.data;
+                        // 仅在 open_id 模式下补 owner_name / chat_creator_name；其他 id_type 由调用方负责
+                        if ((p.user_id_type ?? 'open_id') === 'open_id' && data) {
+                            const ids = [data.owner_id, data.chat_creator].filter((id) => !!id);
+                            if (ids.length > 0) {
+                                await (0, name_resolver_1.batchResolveUserNames)({
+                                    client,
+                                    accountId: client.account.accountId,
+                                    openIds: ids,
+                                    log: (...args) => log.info(args.map(String).join(' ')),
+                                });
+                                if (data.owner_id) {
+                                    data.owner_name = (0, name_resolver_1.resolveUserName)(client.account.accountId, data.owner_id) ?? null;
+                                }
+                                if (data.chat_creator) {
+                                    data.chat_creator_name = (0, name_resolver_1.resolveUserName)(client.account.accountId, data.chat_creator) ?? null;
+                                }
+                            }
+                        }
                         return (0, helpers_1.json)({
-                            chat: res.data,
+                            chat: data,
                         });
                     }
                 }

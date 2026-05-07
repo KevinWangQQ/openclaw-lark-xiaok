@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerChatMembersTool = registerChatMembersTool;
 const typebox_1 = require("@sinclair/typebox");
 const helpers_1 = require("../helpers.js");
+const name_resolver_1 = require("../im/name-resolver.js");
 // ---------------------------------------------------------------------------
 // Schema
 // ---------------------------------------------------------------------------
@@ -66,11 +67,23 @@ function registerChatMembersTool(api) {
                 }), { as: 'user' });
                 (0, helpers_1.assertLarkOk)(res);
                 const data = res.data;
-                const memberCount = data?.items?.length ?? 0;
+                const items = data?.items;
+                const memberCount = items?.length ?? 0;
                 const memberTotal = data?.member_total ?? 0;
+                // 罕见路径：API 偶尔返回空 name，从合并缓存里补一下（仅 open_id 模式）
+                if (Array.isArray(items) && (p.member_id_type ?? 'open_id') === 'open_id') {
+                    const accountId = client.account.accountId;
+                    for (const item of items) {
+                        if (!item.name && item.member_id) {
+                            const cached = (0, name_resolver_1.resolveUserName)(accountId, item.member_id);
+                            if (cached)
+                                item.name = cached;
+                        }
+                    }
+                }
                 log.info(`chat_members: found ${memberCount} members (total: ${memberTotal})`);
                 return (0, helpers_1.json)({
-                    items: data?.items,
+                    items,
                     has_more: data?.has_more ?? false,
                     page_token: data?.page_token,
                     member_total: memberTotal,
