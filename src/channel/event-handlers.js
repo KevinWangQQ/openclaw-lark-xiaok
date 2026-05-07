@@ -373,7 +373,11 @@ async function handleCardActionEvent(ctx, data) {
         const msgId = data.open_message_id || data.context?.open_message_id || '';
         elog.info(`Non-OAuth card action from ${openId} in ${chatId}: ${JSON.stringify(actionValue)}`);
         const syntheticEvent = {
-            sender: { sender_id: { open_id: openId } },
+            // sender_type:'user' is required so resolveSenderInfo (enrich.js:49)
+            // doesn't early-return with "skipping name resolution" — without this,
+            // ctx.senderName stays undefined and the agent prompt renders open_id
+            // for the speaker label (observed in live log at 23:29:13 / 23:29:36).
+            sender: { sender_id: { open_id: openId }, sender_type: 'user' },
             message: {
                 message_id: msgId || `card_action_${Date.now()}`,
                 chat_id: chatId,
