@@ -16,6 +16,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getUserNameCache = exports.clearUserNameCache = exports.UserNameCache = void 0;
 exports.batchResolveUserNames = batchResolveUserNames;
 exports.createBatchResolveNames = createBatchResolveNames;
+exports.resolveBotName = resolveBotName;
 exports.resolveUserName = resolveUserName;
 const lark_client_1 = require("../../core/lark-client.js");
 const user_name_cache_store_1 = require("./user-name-cache-store.js");
@@ -99,6 +100,51 @@ function createBatchResolveNames(account, log) {
     return async (openIds) => {
         await batchResolveUserNames({ account, openIds, log });
     };
+}
+/**
+ * Resolve a single bot's display name via `/open-apis/bot/v3/bots/basic_batch`.
+ *
+ * Bots are not returned by the contact API, so they have their own endpoint.
+ * Names share the same account-scoped cache (keyed by openId) since both
+ * bots and users have `ou_` prefixed openIds and a single display name.
+ */
+async function resolveBotName(params) {
+    const { account, openId, log } = params;
+    if (!account.configured || !openId)
+        return {};
+    const cache = (0, user_name_cache_store_1.getUserNameCache)(account.accountId);
+    if (cache.has(openId))
+        return { name: cache.get(openId) ?? '' };
+    try {
+        const client = lark_client_1.LarkClient.fromAccount(account).sdk;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const res = await client.request({
+            method: 'GET',
+            url: '/open-apis/bot/v3/bots/basic_batch',
+            params: { bot_ids: [openId] },
+        });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const bot = res?.data?.bots?.[openId];
+        const name = bot?.name || bot?.i18n_names?.zh_cn || bot?.i18n_names?.en_us || '';
+        // Cache even empty names to avoid repeated API calls for bots
+        // whose names we cannot resolve.
+        cache.set(openId, name);
+        return { name: name || undefined };
+    }
+    catch (err) {
+        // Bot name resolution is best-effort: missing `bot:basic_info` scope
+        // should not surface as a permission notification to the agent. Log
+        // and cache an empty name so we don't retry, then fall back to openId.
+        const permErr = (0, permission_1.extractPermissionError)(err);
+        if (permErr) {
+            log(`feishu: permission error resolving bot name (best-effort, ignored): code=${permErr.code}`);
+        }
+        else {
+            log(`feishu: failed to resolve bot name for ${openId}: ${String(err)}`);
+        }
+        cache.set(openId, '');
+        return {};
+    }
 }
 /**
  * Resolve a single user's display name.

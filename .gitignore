@@ -1,6 +1,0 @@
-node_modules/
-*.log
-.DS_Store
-# real production data — never commit
-data/wiki-bots*.json
-examples/wiki-bots*.json.real

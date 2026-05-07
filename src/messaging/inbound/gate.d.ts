@@ -25,7 +25,7 @@
 import type { ClawdbotConfig } from 'openclaw/plugin-sdk';
 import type { HistoryEntry } from 'openclaw/plugin-sdk/reply-history';
 import type { MessageContext } from '../types';
-import type { FeishuConfig, LarkAccount } from '../../core/types';
+import type { FeishuConfig, FeishuGroupConfig, LarkAccount } from '../../core/types';
 /**
  * Resolve the effective `respondToMentionAll` setting.
  *
@@ -42,6 +42,21 @@ export declare function resolveRespondToMentionAll(params: {
         respondToMentionAll?: boolean;
     };
 }): boolean;
+/**
+ * Resolve the effective allowBots setting.
+ *
+ * Precedence: per-group > default ("*") > account > 'mentions'.
+ *
+ * The `'mentions'` default lets bot-to-bot interaction work out of the box
+ * while still requiring an explicit @-mention in groups; DMs treat it as
+ * pass-through. Operators can opt into fully-open (`true`) or fully-closed
+ * (`false`) explicitly.
+ */
+export declare function resolveAllowBots(params: {
+    groupConfig?: FeishuGroupConfig;
+    defaultConfig?: FeishuGroupConfig;
+    accountFeishuCfg?: FeishuConfig;
+}): boolean | 'mentions';
 /**
  * Read the pairing allowFrom store for the Feishu channel via the SDK runtime.
  */
