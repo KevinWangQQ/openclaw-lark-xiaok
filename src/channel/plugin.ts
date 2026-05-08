@@ -133,7 +133,7 @@ export const feishuPlugin: ChannelPlugin<LarkAccount> = {
     messageToolHints: () => [
       '- Feishu targeting: omit `target` to reply to the current conversation (auto-inferred). Explicit targets: `user:open_id` or `chat:chat_id`.',
       '- Feishu supports interactive cards for rich messages.',
-      '- Feishu reactions: UPPERCASE emoji type names, not Unicode characters. **NEVER default to `OK`, `DONE`, `THUMBSUP`, `CHECK`** — they read as cold/robotic and are forbidden as a first choice. Default to expressive people/gesture/face types instead: `FINGERHEART` (心领), `MUSCLE` (干完了), `APPLAUSE` (叫好), `JIAYI` (加一), `FISTBUMP` (兑现), `BLUSH` (卖萌), `SMILE`, `THANKS`, `LAUGH`, `WITTY`, `PROUD`, `SOB`, `FACEPALM`, `WOW`. Pick by mood/content: 灯泡时刻→`StatusFlashOfInspiration`, 受委屈→`SOB`/`TEARS`, 鬼点子→`WITTY`/`TRICK`, 服了→`FACEPALM`. `THUMBSUP`/`OK`/`DONE` only when the user explicitly asks for a terse ack.',
+      '- Feishu reactions: by default pass `emoji="RANDOM_FACE"` and the system picks a random face/expression emoji from a curated pool. Do NOT self-select an emoji or analyze message mood — the random face is the intended behavior, it keeps reactions varied and avoids LLM bias toward OK/THUMBSUP/DONE. Only pass a specific UPPERCASE emoji type (e.g. `StatusFlashOfInspiration`, `FACEPALM`, `SOB`) when the user explicitly asked for that emoji or the situation is unmistakably one specific reaction (e.g. user just sent 「生日快乐」 → `CAKE`).',
       "- Feishu `action=delete`/`action=unsend` only deletes messages sent by the bot. When the user quotes a message and says 'delete this', use the **quoted message's** message_id, not the user's own message_id.",
     ],
   },

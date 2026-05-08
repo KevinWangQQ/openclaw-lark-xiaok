@@ -9,10 +9,47 @@
  * messages using the IM Message Reaction API.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.VALID_FEISHU_EMOJI_TYPES = exports.FeishuEmoji = void 0;
+exports.VALID_FEISHU_EMOJI_TYPES = exports.FeishuEmoji = exports.FACE_EMOJI_POOL = void 0;
 exports.addReactionFeishu = addReactionFeishu;
 exports.removeReactionFeishu = removeReactionFeishu;
 exports.listReactionsFeishu = listReactionsFeishu;
+exports.pickRandomFaceEmoji = pickRandomFaceEmoji;
+exports.isFaceRandomSentinel = isFaceRandomSentinel;
+
+// ---------------------------------------------------------------------------
+// Patch (xiaok): face-only random emoji pool
+// ---------------------------------------------------------------------------
+// Curated subset of VALID_FEISHU_EMOJI_TYPES limited to face/expression
+// emojis (no gestures, hands, objects, animals, food). Sourced from
+// https://open.feishu.cn/document/server-docs/im-v1/message-reaction/emojis-introduce
+// (visited 2026-05-08).
+exports.FACE_EMOJI_POOL = [
+    'SMILE', 'BLUSH', 'LAUGH', 'SMIRK', 'LOL', 'FACEPALM', 'LOVE', 'WINK',
+    'PROUD', 'WITTY', 'SMART', 'THINKING', 'SOB', 'CRY', 'NOSEPICK', 'HAUGHTY',
+    'SPITBLOOD', 'TOASTED', 'GLANCE', 'DULL', 'INNOCENTSMILE', 'JOYFUL', 'WOW',
+    'TRICK', 'YEAH', 'TEARS', 'EMBARRASSED', 'KISS', 'SMOOCH', 'DROOL',
+    'OBSESSED', 'TEASE', 'SHOWOFF', 'XBLUSH', 'SILENT', 'WHAT', 'FROWN', 'SHY',
+    'DIZZY', 'LOOKDOWN', 'CHUCKLE', 'WAIL', 'CRAZY', 'WHIMPER', 'BLUBBER',
+    'WRONGED', 'HUSKY', 'SHHH', 'SMUG', 'ANGRY', 'SHOCKED', 'TERROR',
+    'PETRIFIED', 'SWEAT', 'SPEECHLESS', 'SLEEP', 'DROWSY', 'YAWN', 'SICK',
+    'PUKE', 'BETRAYED', 'MeMeMe', 'Sigh', 'SLIGHT', 'TONGUE', 'EYESCLOSED'
+];
+
+// Sentinel values the model can pass to request a random face emoji.
+const FACE_RANDOM_SENTINELS = new Set([
+    'RANDOM_FACE', 'FACE_RANDOM', 'RANDOMFACE', 'FACERANDOM',
+    'AUTO', 'RANDOM',
+]);
+
+function pickRandomFaceEmoji() {
+    const pool = exports.FACE_EMOJI_POOL;
+    return pool[Math.floor(Math.random() * pool.length)];
+}
+
+function isFaceRandomSentinel(value) {
+    if (typeof value !== 'string') return false;
+    return FACE_RANDOM_SENTINELS.has(value.trim().toUpperCase());
+}
 const lark_client_1 = require("../../core/lark-client.js");
 // ---------------------------------------------------------------------------
 // Feishu emoji constants

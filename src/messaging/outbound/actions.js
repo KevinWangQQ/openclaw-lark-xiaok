@@ -275,11 +275,19 @@ async function handleReact(cfg, params, accountId) {
         log.info(`react: removed ${botReactions.length} bot reaction(s)`);
         return (0, sdk_compat_1.jsonResult)({ ok: true, removed: botReactions.length });
     }
-    log.info(`react: adding emoji=${emoji} to messageId=${messageId}`);
+    // Patch (xiaok): if emoji is a random-face sentinel, pick from the curated
+    // face/expression pool. Lets the model say emoji='RANDOM_FACE' instead of
+    // self-selecting and falling into LLM training bias toward OK/THUMBSUP.
+    let resolvedEmoji = emoji;
+    if (reactions_1.isFaceRandomSentinel(emoji)) {
+        resolvedEmoji = reactions_1.pickRandomFaceEmoji();
+        log.info(`react: random face sentinel "${emoji}" -> ${resolvedEmoji}`);
+    }
+    log.info(`react: adding emoji=${resolvedEmoji} to messageId=${messageId}`);
     const { reactionId } = await (0, reactions_1.addReactionFeishu)({
         cfg,
         messageId,
-        emojiType: emoji,
+        emojiType: resolvedEmoji,
         accountId,
     });
     log.info(`react: added reactionId=${reactionId}`);
