@@ -230,9 +230,15 @@ async function executeReactions(params, ctx) {
         const account = (0, helpers_1.getFirstAccount)(config);
         const logFn = (...args) => log.info(args.map(String).join(' '));
         log.info(`reactions: message_id=${p.message_id}, reaction_type=${p.reaction_type ?? '*'}`);
+        // Feishu IM v1 reactions list endpoint is GET /messages/:id/reactions
+        // (NO /list suffix — that 404s. POST same path = create, DELETE
+        // /reactions/:reaction_id = delete. Original code had /reactions/list
+        // which surfaced as "JSON at position 4" because the SDK's response
+        // handler choked on Feishu's HTML 404 page; the prior hotfix's switch
+        // to sdk.request made the 404 visible as a real HTTP error.)
         const res = await client.invoke('feishu_im_user_message.reactions', (sdk, opts) => sdk.request({
             method: 'GET',
-            url: `/open-apis/im/v1/messages/${encodeURIComponent(p.message_id)}/reactions/list`,
+            url: `/open-apis/im/v1/messages/${encodeURIComponent(p.message_id)}/reactions`,
             params: {
                 user_id_type: 'open_id',
                 ...(p.reaction_type ? { reaction_type: p.reaction_type } : {}),
