@@ -139,7 +139,7 @@ exports.feishuPlugin = {
         messageToolHints: () => [
             '- Feishu targeting: omit `target` to reply to the current conversation (auto-inferred). Explicit targets: `user:open_id` or `chat:chat_id`.',
             '- Feishu supports interactive cards for rich messages.',
-            '- Feishu reactions use UPPERCASE emoji type names (e.g. `OK`,`THUMBSUP`,`THANKS`,`MUSCLE`,`FINGERHEART`,`APPLAUSE`,`FISTBUMP`,`JIAYI`,`DONE`,`SMILE`,`BLUSH` ), not Unicode emoji characters.',
+            '- Feishu reactions use UPPERCASE emoji type names, not Unicode emoji characters. Prefer expressive people/gesture types (`FINGERHEART`,`MUSCLE`,`APPLAUSE`,`JIAYI`,`FISTBUMP`,`THUMBSUP`,`BLUSH`,`SMILE`,`THANKS`) over plain status icons. Avoid `OK`/`DONE` unless the user explicitly asked for a terse acknowledgement — they read as cold/robotic.',
             "- Feishu `action=delete`/`action=unsend` only deletes messages sent by the bot. When the user quotes a message and says 'delete this', use the **quoted message's** message_id, not the user's own message_id.",
         ],
     },
