@@ -1,6 +1,6 @@
 {
   "name": "@lucien/openclaw-lark-extended",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Extended fork of @larksuite/openclaw-lark: completes the Feishu channel config schema (spinnerPhrases, typingEmoji, replyInThread, allowBots, threadSession, per-group overrides) and ships an optional opt-in feishu-social extension for group-context injection, sender-name registry, and bot reply-loop guarding.",
   "license": "MIT",
   "author": "Lucien",

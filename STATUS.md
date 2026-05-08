@@ -3,19 +3,18 @@
 Snapshot of the fork's current state. Updated when productionization phases
 complete or live deployment changes.
 
-Last updated: **2026-05-07** (after first live cutover + GitHub push)
+Last updated: **2026-05-07** (after 0.2.0 name-resolver refactor cutover)
 
 ## TL;DR
 
-- Fork version: **0.1.1**
+- Fork version: **0.2.0** (substantial release; see CHANGELOG)
 - Upstream baseline: **`@larksuite/openclaw-lark@2026.5.7`** (in sync with npm latest)
 - Distribution: **internal team share** via private GitHub repo
   [`ChenyqThu/openclaw-lark-extended`](https://github.com/ChenyqThu/openclaw-lark-extended);
   npm publish not yet
-- Live deployment: ✅ running on the maintainer's mac-mini gateway since
-  2026-05-07 13:31 PDT, pid 4410 active, no runtime drift (the cosmetic
-  package.json version banner drift will resolve on the next code-level
-  deploy)
+- Live deployment: ✅ running on the maintainer's mac-mini gateway, gateway
+  active on 127.0.0.1:18789, drift-check ✓ no drift after 2026-05-07
+  19:06 PDT cutover. Pre-existing 0.1.0 ↔ 0.1.1 cosmetic drift cleared.
 
 ## Branches
 
@@ -100,6 +99,13 @@ restarts the gateway.
 
 ## Recently completed
 
+- 2026-05-07 — **0.2.0 name-resolver refactor + unified message tool**
+  (commits `659f7e1` Phase 0 → `f3f9b45` final hotfix on lucien/main, 11
+  commits total). Fixes the long-standing 张冠李戴 bug in group context
+  injection. Vitest 94/94 green. Live cutover backup
+  `~/.openclaw/openclaw-lark.bak-20260507T190634`. Jarvis verification:
+  B1 timeline real-name ratio ≥95%, B2 attribution 5/5, all 7 read
+  dispatcher actions PASS. See CHANGELOG.md for full release notes.
 - 2026-05-07 — productionization phases 1–8 + b-path rebase + live cutover
   + `replyInThread: 'disabled'` schema hotfix (commits `fa118db…0b4b583`
   on main; rebased and overlaid on `lucien/main` as `f56f3ca`; hotfix
