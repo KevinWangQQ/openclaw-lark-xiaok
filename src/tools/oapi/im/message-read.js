@@ -13,6 +13,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerMessageReadTools = registerMessageReadTools;
+exports.GetMessagesSchema = void 0;
+exports.GetThreadMessagesSchema = void 0;
+exports.SearchMessagesSchema = void 0;
+exports.executeListMessages = executeListMessages;
+exports.executeThreadMessages = executeThreadMessages;
+exports.executeSearchMessages = executeSearchMessages;
 const typebox_1 = require("@sinclair/typebox");
 const helpers_1 = require("../helpers.js");
 const time_utils_1 = require("./time-utils.js");
@@ -87,15 +93,68 @@ const GetMessagesSchema = typebox_1.Type.Object({
         description: '结束时间（ISO 8601 格式，如 2026-02-27T23:59:59+08:00）。与 relative_time 互斥',
     })),
 });
+/**
+ * Reusable list-messages implementation. Used by both the standalone
+ * `feishu_im_user_get_messages` tool and the unified `message action=list`
+ * dispatcher in message.js. ctx.toolClient is invoked per-call so each
+ * dispatch gets a fresh client bound to the right account.
+ */
+async function executeListMessages(params, ctx) {
+    const { config, log, toolClient } = ctx;
+    const p = params;
+    try {
+        if (p.open_id && p.chat_id) {
+            return (0, helpers_1.json)({ error: 'cannot provide both open_id and chat_id, please provide only one' });
+        }
+        if (!p.open_id && !p.chat_id) {
+            return (0, helpers_1.json)({ error: 'either open_id or chat_id is required' });
+        }
+        if (p.relative_time && (p.start_time || p.end_time)) {
+            return (0, helpers_1.json)({ error: 'cannot use both relative_time and start_time/end_time' });
+        }
+        const client = toolClient();
+        let chatId = p.chat_id ?? '';
+        if (p.open_id) {
+            log.info(`resolving P2P chat for open_id=${p.open_id}`);
+            chatId = await resolveP2PChatId(client, p.open_id, log);
+        }
+        const time = resolveTimeRange(p, log.info);
+        log.info(`list: chat_id=${chatId}, sort=${p.sort_rule ?? 'create_time_desc'}, page_size=${p.page_size ?? 50}`);
+        const res = await client.invoke('feishu_im_user_get_messages.default', (sdk, opts) => sdk.im.v1.message.list({
+            params: {
+                container_id_type: 'chat',
+                container_id: chatId,
+                start_time: time.start,
+                end_time: time.end,
+                sort_type: sortRuleToSortType(p.sort_rule),
+                page_size: p.page_size ?? 50,
+                page_token: p.page_token,
+                card_msg_content_type: 'raw_card_content',
+            },
+        }, opts), {
+            as: 'user',
+        });
+        (0, helpers_1.assertLarkOk)(res);
+        return await formatAndReturn(res, config, log, client);
+    }
+    catch (err) {
+        return await (0, helpers_1.handleInvokeErrorWithAutoAuth)(err, config);
+    }
+}
 function registerGetMessages(api) {
     if (!api.config)
         return false;
-    const config = api.config;
-    const { toolClient, log } = (0, helpers_1.createToolContext)(api, 'feishu_im_user_get_messages');
+    const ctx = {
+        config: api.config,
+        ...(0, helpers_1.createToolContext)(api, 'feishu_im_user_get_messages'),
+    };
     return (0, helpers_1.registerTool)(api, {
         name: 'feishu_im_user_get_messages',
         label: 'Feishu: Get IM Messages',
-        description: '【以用户身份】获取群聊或单聊的历史消息。' +
+        description: '【DEPRECATED — 优先使用 message tool 的 action=list】' +
+            '\n保留此独立工具仅为向后兼容。新调用方请用：' +
+            '\n  message {action: "list", chat_id|open_id, relative_time?, ...}' +
+            '\n\n【以用户身份】获取群聊或单聊的历史消息。' +
             '\n\n用法：' +
             '\n- 通过 chat_id 获取群聊/单聊消息' +
             '\n- 通过 open_id 获取与指定用户的单聊消息（自动解析 chat_id）' +
@@ -108,45 +167,7 @@ function registerGetMessages(api) {
             '\n\n返回消息列表，每条消息包含 message_id、msg_type、content（AI 可读文本）、sender、create_time 等字段。',
         parameters: GetMessagesSchema,
         async execute(_toolCallId, params) {
-            const p = params;
-            try {
-                if (p.open_id && p.chat_id) {
-                    return (0, helpers_1.json)({ error: 'cannot provide both open_id and chat_id, please provide only one' });
-                }
-                if (!p.open_id && !p.chat_id) {
-                    return (0, helpers_1.json)({ error: 'either open_id or chat_id is required' });
-                }
-                if (p.relative_time && (p.start_time || p.end_time)) {
-                    return (0, helpers_1.json)({ error: 'cannot use both relative_time and start_time/end_time' });
-                }
-                const client = toolClient();
-                let chatId = p.chat_id ?? '';
-                if (p.open_id) {
-                    log.info(`resolving P2P chat for open_id=${p.open_id}`);
-                    chatId = await resolveP2PChatId(client, p.open_id, log);
-                }
-                const time = resolveTimeRange(p, log.info);
-                log.info(`list: chat_id=${chatId}, sort=${p.sort_rule ?? 'create_time_desc'}, page_size=${p.page_size ?? 50}`);
-                const res = await client.invoke('feishu_im_user_get_messages.default', (sdk, opts) => sdk.im.v1.message.list({
-                    params: {
-                        container_id_type: 'chat',
-                        container_id: chatId,
-                        start_time: time.start,
-                        end_time: time.end,
-                        sort_type: sortRuleToSortType(p.sort_rule),
-                        page_size: p.page_size ?? 50,
-                        page_token: p.page_token,
-                        card_msg_content_type: 'raw_card_content',
-                    },
-                }, opts), {
-                    as: 'user',
-                });
-                (0, helpers_1.assertLarkOk)(res);
-                return await formatAndReturn(res, config, log, client);
-            }
-            catch (err) {
-                return await (0, helpers_1.handleInvokeErrorWithAutoAuth)(err, config);
-            }
+            return executeListMessages(params, ctx);
         },
     }, { name: 'feishu_im_user_get_messages' });
 }
@@ -161,15 +182,45 @@ const GetThreadMessagesSchema = typebox_1.Type.Object({
     page_size: typebox_1.Type.Optional(typebox_1.Type.Number({ description: '每页消息数（1-50），默认 50', minimum: 1, maximum: 50 })),
     page_token: typebox_1.Type.Optional(typebox_1.Type.String({ description: '分页标记，用于获取下一页' })),
 });
+async function executeThreadMessages(params, ctx) {
+    const { config, log, toolClient } = ctx;
+    const p = params;
+    try {
+        const client = toolClient();
+        log.info(`list: thread_id=${p.thread_id}, sort=${p.sort_rule ?? 'create_time_desc'}, page_size=${p.page_size ?? 50}`);
+        const res = await client.invoke('feishu_im_user_get_messages.default', (sdk, opts) => sdk.im.v1.message.list({
+            params: {
+                container_id_type: 'thread',
+                container_id: p.thread_id,
+                sort_type: sortRuleToSortType(p.sort_rule),
+                page_size: p.page_size ?? 50,
+                page_token: p.page_token,
+                card_msg_content_type: 'raw_card_content',
+            },
+        }, opts), {
+            as: 'user',
+        });
+        (0, helpers_1.assertLarkOk)(res);
+        return await formatAndReturn(res, config, log, client);
+    }
+    catch (err) {
+        return await (0, helpers_1.handleInvokeErrorWithAutoAuth)(err, config);
+    }
+}
 function registerGetThreadMessages(api) {
     if (!api.config)
         return false;
-    const config = api.config;
-    const { toolClient, log } = (0, helpers_1.createToolContext)(api, 'feishu_im_user_get_thread_messages');
+    const ctx = {
+        config: api.config,
+        ...(0, helpers_1.createToolContext)(api, 'feishu_im_user_get_thread_messages'),
+    };
     return (0, helpers_1.registerTool)(api, {
         name: 'feishu_im_user_get_thread_messages',
         label: 'Feishu: Get Thread Messages',
-        description: '【以用户身份】获取话题（thread）内的消息列表。' +
+        description: '【DEPRECATED — 优先使用 message tool 的 action=thread】' +
+            '\n保留此独立工具仅为向后兼容。新调用方请用：' +
+            '\n  message {action: "thread", thread_id, ...}' +
+            '\n\n【以用户身份】获取话题（thread）内的消息列表。' +
             '\n\n用法：' +
             '\n- 通过 thread_id（omt_xxx）获取话题内的所有消息' +
             '\n- 支持分页：page_size + page_token' +
@@ -177,28 +228,7 @@ function registerGetThreadMessages(api) {
             '\n\n返回消息列表，格式同 feishu_im_user_get_messages。',
         parameters: GetThreadMessagesSchema,
         async execute(_toolCallId, params) {
-            const p = params;
-            try {
-                const client = toolClient();
-                log.info(`list: thread_id=${p.thread_id}, sort=${p.sort_rule ?? 'create_time_desc'}, page_size=${p.page_size ?? 50}`);
-                const res = await client.invoke('feishu_im_user_get_messages.default', (sdk, opts) => sdk.im.v1.message.list({
-                    params: {
-                        container_id_type: 'thread',
-                        container_id: p.thread_id,
-                        sort_type: sortRuleToSortType(p.sort_rule),
-                        page_size: p.page_size ?? 50,
-                        page_token: p.page_token,
-                        card_msg_content_type: 'raw_card_content',
-                    },
-                }, opts), {
-                    as: 'user',
-                });
-                (0, helpers_1.assertLarkOk)(res);
-                return await formatAndReturn(res, config, log, client);
-            }
-            catch (err) {
-                return await (0, helpers_1.handleInvokeErrorWithAutoAuth)(err, config);
-            }
+            return executeThreadMessages(params, ctx);
         },
     }, { name: 'feishu_im_user_get_thread_messages' });
 }
@@ -277,33 +307,10 @@ function enrichMessages(messages, items, chatMap, nameResolver) {
         };
     });
 }
-function registerSearchMessages(api) {
-    if (!api.config)
-        return false;
-    const config = api.config;
-    const { toolClient, log } = (0, helpers_1.createToolContext)(api, 'feishu_im_user_search_messages');
-    return (0, helpers_1.registerTool)(api, {
-        name: 'feishu_im_user_search_messages',
-        label: 'Feishu: Search Messages',
-        description: '【以用户身份】跨会话搜索飞书消息。' +
-            '\n\n用法：' +
-            '\n- 按关键词搜索消息内容' +
-            '\n- 按发送者、被@用户、消息类型过滤' +
-            '\n- 按时间范围过滤：relative_time 或 start_time/end_time' +
-            '\n- 限定在某个会话内搜索（chat_id）' +
-            '\n- 支持分页：page_size + page_token' +
-            '\n\n【参数约束】' +
-            '\n- 所有参数均可选，但至少应提供一个过滤条件' +
-            '\n- relative_time 和 start_time/end_time 不能同时使用' +
-            '\n- page_size 范围 1-50，默认 50' +
-            '\n\n返回消息列表，每条消息包含 message_id、msg_type、content、sender、create_time 等字段。' +
-            '\n每条消息还包含 chat_id、chat_type（p2p/group）、chat_name（群名或单聊对方名字）。' +
-            '\n单聊消息额外包含 chat_partner（对方 open_id 和名字）。' +
-            '\n搜索结果中的 chat_id 和 thread_id 可配合 feishu_im_user_get_messages / feishu_im_user_get_thread_messages 查看上下文。',
-        parameters: SearchMessagesSchema,
-        async execute(_toolCallId, params) {
-            const p = params;
-            try {
+async function executeSearchMessages(params, ctx) {
+    const { config, log, toolClient } = ctx;
+    const p = params;
+    try {
                 if (p.relative_time && (p.start_time || p.end_time)) {
                     return (0, helpers_1.json)({ error: 'cannot use both relative_time and start_time/end_time' });
                 }
@@ -363,12 +370,44 @@ function registerSearchMessages(api) {
                 // 5. 拼装返回（p2p target name 已经被 batchResolveChatNames 写入缓存）
                 const nameResolver = (id) => (0, name_resolver_1.resolveUserName)(account.accountId, id);
                 const result = enrichMessages(messages, items, chatMap, nameResolver);
-                log.info(`result: ${result.length} messages, has_more=${hasMore}`);
-                return (0, helpers_1.json)({ messages: result, has_more: hasMore, page_token: pageToken });
-            }
-            catch (err) {
-                return await (0, helpers_1.handleInvokeErrorWithAutoAuth)(err, config);
-            }
+        log.info(`result: ${result.length} messages, has_more=${hasMore}`);
+        return (0, helpers_1.json)({ messages: result, has_more: hasMore, page_token: pageToken });
+    }
+    catch (err) {
+        return await (0, helpers_1.handleInvokeErrorWithAutoAuth)(err, config);
+    }
+}
+function registerSearchMessages(api) {
+    if (!api.config)
+        return false;
+    const ctx = {
+        config: api.config,
+        ...(0, helpers_1.createToolContext)(api, 'feishu_im_user_search_messages'),
+    };
+    return (0, helpers_1.registerTool)(api, {
+        name: 'feishu_im_user_search_messages',
+        label: 'Feishu: Search Messages',
+        description: '【DEPRECATED — 优先使用 message tool 的 action=search】' +
+            '\n保留此独立工具仅为向后兼容。新调用方请用：' +
+            '\n  message {action: "search", query?, sender_ids?, mention_ids?, ...}' +
+            '\n\n【以用户身份】跨会话搜索飞书消息。' +
+            '\n\n用法：' +
+            '\n- 按关键词搜索消息内容' +
+            '\n- 按发送者、被@用户、消息类型过滤' +
+            '\n- 按时间范围过滤：relative_time 或 start_time/end_time' +
+            '\n- 限定在某个会话内搜索（chat_id）' +
+            '\n- 支持分页：page_size + page_token' +
+            '\n\n【参数约束】' +
+            '\n- 所有参数均可选，但至少应提供一个过滤条件' +
+            '\n- relative_time 和 start_time/end_time 不能同时使用' +
+            '\n- page_size 范围 1-50，默认 50' +
+            '\n\n返回消息列表，每条消息包含 message_id、msg_type、content、sender、create_time 等字段。' +
+            '\n每条消息还包含 chat_id、chat_type（p2p/group）、chat_name（群名或单聊对方名字）。' +
+            '\n单聊消息额外包含 chat_partner（对方 open_id 和名字）。' +
+            '\n搜索结果中的 chat_id 和 thread_id 可配合 message action=list/thread 查看上下文。',
+        parameters: SearchMessagesSchema,
+        async execute(_toolCallId, params) {
+            return executeSearchMessages(params, ctx);
         },
     }, { name: 'feishu_im_user_search_messages' });
 }

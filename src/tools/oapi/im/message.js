@@ -15,10 +15,15 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerFeishuImUserMessageTool = registerFeishuImUserMessageTool;
+exports.executeGetMessage = executeGetMessage;
 const typebox_1 = require("@sinclair/typebox");
 const accounts_1 = require("../../../core/accounts.js");
 const lark_client_1 = require("../../../core/lark-client.js");
 const helpers_1 = require("../helpers.js");
+const message_read_1 = require("./message-read.js");
+const members_1 = require("../chat/members.js");
+const format_messages_1 = require("./format-messages.js");
+const message_schema_1 = require("./message-schema.js");
 const FEISHU_POST_LOCALE_PRIORITY = ['zh_cn', 'en_us', 'ja_jp'];
 /**
  * Check whether a value is a non-null object whose properties can be read.
@@ -143,52 +148,36 @@ function preprocessPostContent(cfg, msgType, content) {
     }
 }
 // ---------------------------------------------------------------------------
-// Schema
+// Read action: get (single message via /im/v1/messages/:id)
+// Phase 4 will add `mget` for batch IDs (uses /messages/mget endpoint).
 // ---------------------------------------------------------------------------
-const FeishuImMessageSchema = typebox_1.Type.Union([
-    // SEND
-    typebox_1.Type.Object({
-        action: typebox_1.Type.Literal('send'),
-        receive_id_type: (0, helpers_1.StringEnum)(['open_id', 'chat_id'], {
-            description: '接收者 ID 类型：open_id（私聊，ou_xxx）、chat_id（群聊，oc_xxx）',
-        }),
-        receive_id: typebox_1.Type.String({
-            description: "接收者 ID，与 receive_id_type 对应。open_id 填 'ou_xxx'，chat_id 填 'oc_xxx'",
-        }),
-        msg_type: (0, helpers_1.StringEnum)(['text', 'post', 'image', 'file', 'audio', 'media', 'interactive', 'share_chat', 'share_user'], {
-            description: '消息类型：text（纯文本）、post（富文本）、image（图片）、file（文件）、interactive（消息卡片）、share_chat（群名片）、share_user（个人名片）等',
-        }),
-        content: typebox_1.Type.String({
-            description: '消息内容（JSON 字符串），格式取决于 msg_type。' +
-                '示例：text → \'{"text":"你好"}\'，' +
-                'image → \'{"image_key":"img_xxx"}\'，' +
-                'share_chat → \'{"chat_id":"oc_xxx"}\'，' +
-                'post → \'{"zh_cn":{"title":"标题","content":[[{"tag":"text","text":"正文"}]]}}\'',
-        }),
-        uuid: typebox_1.Type.Optional(typebox_1.Type.String({
-            description: '幂等唯一标识。同一 uuid 在 1 小时内只会发送一条消息，用于去重',
-        })),
-    }),
-    // REPLY
-    typebox_1.Type.Object({
-        action: typebox_1.Type.Literal('reply'),
-        message_id: typebox_1.Type.String({
-            description: '被回复消息的 ID（om_xxx 格式）',
-        }),
-        msg_type: (0, helpers_1.StringEnum)(['text', 'post', 'image', 'file', 'audio', 'media', 'interactive', 'share_chat', 'share_user'], {
-            description: '消息类型：text（纯文本）、post（富文本）、image（图片）、interactive（消息卡片）等',
-        }),
-        content: typebox_1.Type.String({
-            description: '回复消息内容（JSON 字符串），格式同 send 的 content',
-        }),
-        reply_in_thread: typebox_1.Type.Optional(typebox_1.Type.Boolean({
-            description: '是否以话题形式回复。true 则消息出现在该消息的话题中，false（默认）则出现在聊天主流',
-        })),
-        uuid: typebox_1.Type.Optional(typebox_1.Type.String({
-            description: '幂等唯一标识',
-        })),
-    }),
-]);
+async function executeGetMessage(params, ctx) {
+    const { config, log, toolClient } = ctx;
+    const p = params;
+    try {
+        const client = toolClient();
+        const account = (0, helpers_1.getFirstAccount)(config);
+        const logFn = (...args) => log.info(args.map(String).join(' '));
+        log.info(`get: message_id=${p.message_id}`);
+        const res = await client.invokeByPath('feishu_im_user_message.get', `/open-apis/im/v1/messages/${encodeURIComponent(p.message_id)}`, {
+            method: 'GET',
+            query: { user_id_type: 'open_id', card_msg_content_type: 'raw_card_content' },
+            as: 'user',
+        });
+        if (res.code !== 0) {
+            return (0, helpers_1.json)({ error: `API error: code=${res.code} msg=${res.msg}` });
+        }
+        const items = res.data?.items ?? [];
+        if (items.length === 0) {
+            return (0, helpers_1.json)({ message: null });
+        }
+        const formatted = await (0, format_messages_1.formatMessageList)(items, account, logFn, client);
+        return (0, helpers_1.json)({ message: formatted[0] ?? null });
+    }
+    catch (err) {
+        return await (0, helpers_1.handleInvokeErrorWithAutoAuth)(err, config);
+    }
+}
 // ---------------------------------------------------------------------------
 // Registration
 // ---------------------------------------------------------------------------
@@ -197,22 +186,43 @@ function registerFeishuImUserMessageTool(api) {
         return false;
     const cfg = api.config;
     const { toolClient, log } = (0, helpers_1.createToolContext)(api, 'feishu_im_user_message');
+    // Sub-ctx for delegated read actions. Reuses the same toolClient/log so each
+    // dispatch gets a fresh client bound to the right account; configurations
+    // come from the same api.config root.
+    const readCtx = { config: cfg, log, toolClient };
     return (0, helpers_1.registerTool)(api, {
         name: 'feishu_im_user_message',
         label: 'Feishu: IM User Message',
-        description: '飞书用户身份 IM 消息工具。**有且仅当用户明确要求以自己身份发消息、回复消息时使用，当没有明确要求时优先使用message系统工具**。' +
-            '\n\nActions:' +
+        description: '飞书用户身份 IM 消息工具，统一入口。' +
+            '\n\n【写 actions — 安全约束：发出前必须向用户确认对象 + 内容】' +
             '\n- send（发送消息）：发送消息到私聊或群聊。私聊用 receive_id_type=open_id，群聊用 receive_id_type=chat_id' +
             '\n- reply（回复消息）：回复指定 message_id 的消息，支持话题回复（reply_in_thread=true）' +
+            '\n\n【读 actions — 优先用此入口，旧的 feishu_im_user_get_messages / _get_thread_messages / _search_messages / feishu_chat_members 已 deprecated】' +
+            '\n- list：获取群聊或单聊的历史消息。需要 chat_id 或 open_id（互斥）；支持 relative_time / start_time+end_time 时间过滤；分页 page_size + page_token' +
+            '\n- get：通过 message_id 获取单条消息详情' +
+            '\n- search：跨会话关键词搜索；可按 sender_ids / mention_ids / chat_id / message_type / sender_type / chat_type 过滤' +
+            '\n- thread：通过 thread_id（omt_xxx）获取话题内消息' +
+            '\n- members：通过 chat_id 获取群成员列表（不含 bot）' +
             '\n\n【重要】content 必须是合法 JSON 字符串，格式取决于 msg_type。' +
             '最常用：text 类型 content 为 \'{"text":"消息内容"}\'。' +
-            '\n\n【安全约束】此工具以用户身份发送消息，发出后对方看到的发送者是用户本人。' +
+            '\n\n【安全约束】write actions（send/reply）发出后对方看到的发送者是用户本人。' +
             '调用前必须先向用户确认：1) 发送对象（哪个人或哪个群）2) 消息内容。' +
-            '禁止在用户未明确同意的情况下自行发送消息。',
-        parameters: FeishuImMessageSchema,
+            '禁止在用户未明确同意的情况下自行发送消息。' +
+            'Read actions（list/get/search/thread/members）以用户身份读取，受 group/chat 成员关系约束。',
+        parameters: message_schema_1.FeishuImMessageSchema,
         async execute(_toolCallId, params) {
             const p = params;
             try {
+                // Dispatch read actions first — they delegate to the existing
+                // executeXxx callables. Write actions fall through to the
+                // original switch below.
+                switch (p.action) {
+                    case 'list':    return await (0, message_read_1.executeListMessages)(p, readCtx);
+                    case 'thread':  return await (0, message_read_1.executeThreadMessages)(p, readCtx);
+                    case 'search':  return await (0, message_read_1.executeSearchMessages)(p, readCtx);
+                    case 'members': return await (0, members_1.executeListMembers)(p, readCtx);
+                    case 'get':     return await executeGetMessage(p, readCtx);
+                }
                 const client = toolClient();
                 switch (p.action) {
                     // -----------------------------------------------------------------
