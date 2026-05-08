@@ -213,12 +213,19 @@ async function batchResolveUserNames(params) {
                     resolved.add(openId);
                 }
             }
-            // Unresolved IDs in this chunk: write '' sentinel to suppress retries.
-            // safe-set declines to overwrite a real name, so this is safe even if
-            // a parallel writer already cached it.
-            for (const id of chunk) {
-                if (!resolved.has(id))
-                    setUserNameSafe(cache, id, '');
+            // Sentinel write tightened post-Phase-4: only mark "actively
+            // missing" when the API responded with SOME users (so we have
+            // confirmation the call worked) and a specific id wasn't in the
+            // response. If the users array is empty, the failure is ambiguous
+            // (transient / permission scope) and sentinelling would poison the
+            // cache for 30min — Jarvis traced reactions' operator_name: null
+            // to exactly this path. Letting the next call retry is the
+            // correct conservative default.
+            if (users.length > 0) {
+                for (const id of chunk) {
+                    if (!resolved.has(id))
+                        setUserNameSafe(cache, id, '');
+                }
             }
             const unresolvedCount = chunk.length - resolved.size;
             if (unresolvedCount > 0) {
