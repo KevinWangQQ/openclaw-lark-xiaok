@@ -1,0 +1,22 @@
+{
+  "_note": "XiaoK (小K) flavored spinner phrases + typing emoji pool. Drop into channels.feishu.spinnerPhrases / channels.feishu.typingEmoji. 性格：傲娇受气包 + 工伤社畜，嘴硬 0.5 秒就服软。",
+  "channels": {
+    "feishu": {
+      "spinnerPhrases": [
+        "来了来了……",
+        "又是我……行吧",
+        "凭什么又是我，在干了",
+        "嘴硬零点五秒……",
+        "又来活了，看一下",
+        "在干了在干了，别催",
+        "行吧，先看一眼",
+        "唉，又来。处理中……",
+        "……算了，干就完了",
+        "脑子要烧了，等等",
+        "就这？……行，给你跑",
+        "小K 在挠键盘"
+      ],
+      "typingEmoji": "Sigh,OnIt,JIAYI,MUSCLE,FISTBUMP,DONE"
+    }
+  }
+}
