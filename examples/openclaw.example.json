@@ -1,0 +1,64 @@
+{
+  "_note": "Example openclaw.json snippet showing how to wire @lucien/openclaw-lark-extended. All identifiers (oc_, ou_, cli_) are placeholders. Strip the leading underscore keys before using.",
+
+  "channels": {
+    "feishu": {
+      "domain": "feishu",
+      "_credentials": "Provide via env vars or in accounts; never commit real ones.",
+      "accounts": {
+        "default": {
+          "appId": "${LARK_APP_ID}",
+          "appSecret": "${LARK_APP_SECRET}",
+          "encryptKey": "${LARK_ENCRYPT_KEY}",
+          "verificationToken": "${LARK_VERIFICATION_TOKEN}"
+        }
+      },
+
+      "spinnerPhrases": [
+        "Working on it…",
+        "Thinking…"
+      ],
+      "typingEmoji": "Get",
+      "replyInThread": false,
+      "allowBots": "mentions",
+
+      "groups": {
+        "oc_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": {
+          "replyInThread": true,
+          "allowBots": "mentions"
+        }
+      }
+    }
+  },
+
+  "plugins": {
+    "allow": ["openclaw-lark"],
+    "entries": {
+      "openclaw-lark": {
+        "_note": "config.social activates the optional in-tree feishu-social extension. Disabled by default; set enabled=true to use group-context injection, sender-name registry, and storm-guard.",
+        "config": {
+          "social": {
+            "enabled": false,
+
+            "contextGroups": ["oc_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"],
+            "contextMessageCount": 20,
+            "contextCacheTtlMs": 60000,
+
+            "adminDisplayName": "the admin",
+
+            "stormThreshold": 5,
+            "stormWindowMs": 30000,
+            "circuitBreakerMaxOutbound": 5,
+            "circuitWindowMs": 60000,
+            "circuitBreakerSilenceMs": 300000,
+            "alertReceiverOpenId": "ou_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+
+            "wikiBotsPath": "~/.openclaw/feishu-social/wiki-bots.json",
+            "logDir": "~/.openclaw/feishu-social/logs",
+            "debugLog": false
+          }
+        }
+      }
+    }
+  }
+}

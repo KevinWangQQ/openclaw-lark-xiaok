@@ -1,0 +1,14 @@
+{
+  "kind": "inbound_message",
+  "_note": "Example inbound DM event for scripts/replay-feishu-event.mjs. All identifiers below are placeholders; replace with real captured values when constructing real fixtures. Schema mirrors the event arg of handleFeishuMessage in src/messaging/inbound/handler.js.",
+  "event": {
+    "sender": { "sender_id": { "open_id": "ou_user_example_00000000000000000000000000000000" } },
+    "message": {
+      "message_id": "om_example_00000000000000000000000000000000",
+      "chat_id": "p2p_example_dm_chat",
+      "chat_type": "p2p",
+      "message_type": "text",
+      "content": "{\"text\":\"hello\"}"
+    }
+  }
+}

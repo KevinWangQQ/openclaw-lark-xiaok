@@ -1,0 +1,24 @@
+{
+  "_note": "Schema reference for the optional bot+member registry consulted by the feishu-social extension. The real file lives at ~/.openclaw/feishu-social/wiki-bots.json (path overridable via social.wikiBotsPath). Gitignore it where you keep it — it typically contains real Feishu identifiers. The extension only reads this file when social.enabled is true and social.contextGroups names at least one chat.",
+  "bots": {
+    "agent-id-here": {
+      "agentId": "agent-id-here",
+      "name": "Agent Name",
+      "emoji": "🤖",
+      "openId": "ou_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "appId": "cli_xxxxxxxxxxxxxxxxxxxx",
+      "owner": {
+        "name": "Owner Name",
+        "openId": "ou_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      },
+      "aliases": ["alias1", "alias2"]
+    }
+  },
+  "members": {
+    "ou_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": {
+      "openId": "ou_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "name": "Person Name",
+      "aliases": ["nickname1"]
+    }
+  }
+}

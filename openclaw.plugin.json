@@ -1,16 +1,158 @@
 {
   "id": "openclaw-lark",
-  "channels": ["feishu"],
-  "skills": ["./skills"],
+  "channels": [
+    "feishu"
+  ],
+  "skills": [
+    "./skills"
+  ],
   "configSchema": {
     "type": "object",
     "additionalProperties": false,
-    "properties": {}
+    "properties": {
+      "social": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "Optional in-tree feishu-social extension. Adds group-context injection into the agent's system prompt, a sender-name registry consulted as a last-resort name resolver, and a storm-guard that protects against bot-to-bot reply loops. Disabled by default — set `enabled: true` to activate.",
+        "properties": {
+          "enabled":                    { "type": "boolean", "default": false, "description": "Master switch. When false (default), no hooks register and the registry stays unloaded — clean install behaves exactly like upstream openclaw-lark." },
+          "adminDisplayName":           { "type": "string",  "description": "Display name substituted into the {adminName} placeholder in the context template. Default 'the admin'." },
+          "contextTemplate":            { "type": "string",  "description": "Optional override for the system-prompt context block. When unset, a neutral default is used. See examples/social-context-templates/ for shipped variants. Supports placeholders: {time}, {count}, {timeline}, {members}, {groupBots}, {botCount}, {adminName}." },
+          "contextGroups":              { "type": "array",   "items": { "type": "string" }, "description": "List of oc_* chat IDs where group context is injected. Empty list = extension is loaded but injects no context (sender-name lookup still works)." },
+          "contextMessageCount":        { "type": "number",  "description": "How many recent messages to fetch per group context build (5-100). Default 20." },
+          "contextCacheTtlMs":          { "type": "number",  "description": "TTL for the per-chat context cache, in ms. Default 60000." },
+          "stormThreshold":             { "type": "number",  "description": "Bot-inbound @-mention count within stormWindowMs that trips the storm debounce. Default 5." },
+          "stormWindowMs":              { "type": "number",  "description": "Window in ms used for the bot-inbound storm threshold. Default 30000." },
+          "circuitBreakerMaxOutbound":  { "type": "number",  "description": "Outbound count within circuitWindowMs that opens the circuit. Default 5." },
+          "circuitWindowMs":            { "type": "number",  "description": "Window in ms used for the outbound circuit-breaker count. Default 60000." },
+          "circuitBreakerSilenceMs":    { "type": "number",  "description": "How long the circuit stays open once tripped, in ms. Default 300000 (5 min)." },
+          "alertReceiverOpenId":        { "type": "string",  "description": "Admin open_id that receives a DM when storm-debounce fires. When unset, no DM is sent (storm guard still drops bot inbound)." },
+          "botOverrides":               { "type": "object",  "description": "User-supplied bot metadata overrides keyed by agentId, merged on top of wiki-bots.json entries." },
+          "debugLog":                   { "type": "boolean", "description": "Enable verbose extension log file. Path determined by logDir. Default true." },
+          "logDir":                     { "type": "string",  "description": "Directory for the extension log file. Defaults to ~/.openclaw/feishu-social/logs/." },
+          "wikiBotsPath":               { "type": "string",  "description": "Path to a user-supplied wiki-bots.json (member + bot registry). Defaults to ~/.openclaw/feishu-social/wiki-bots.json. Schema documented in examples/wiki-bots.example.json." }
+        }
+      }
+    }
+  },
+  "contracts": {
+    "tools": [
+      "feishu_bitable_app",
+      "feishu_bitable_app_table",
+      "feishu_bitable_app_table_field",
+      "feishu_bitable_app_table_record",
+      "feishu_bitable_app_table_view",
+      "feishu_calendar_calendar",
+      "feishu_calendar_event",
+      "feishu_calendar_event_attendee",
+      "feishu_calendar_freebusy",
+      "feishu_chat",
+      "feishu_chat_members",
+      "feishu_create_doc",
+      "feishu_doc_comments",
+      "feishu_doc_media",
+      "feishu_drive_file",
+      "feishu_fetch_doc",
+      "feishu_get_user",
+      "feishu_im_bot_image",
+      "feishu_im_user_fetch_resource",
+      "feishu_im_user_get_messages",
+      "feishu_im_user_get_thread_messages",
+      "feishu_im_user_message",
+      "feishu_im_user_search_messages",
+      "feishu_oauth",
+      "feishu_oauth_batch_auth",
+      "feishu_search_doc_wiki",
+      "feishu_search_user",
+      "feishu_sheet",
+      "feishu_task_comment",
+      "feishu_task_subtask",
+      "feishu_task_task",
+      "feishu_task_agent",
+      "feishu_task_attachment",
+      "feishu_task_tasklist",
+      "feishu_update_doc",
+      "feishu_wiki_space",
+      "feishu_wiki_space_node",
+      "feishu_task_section",
+      "feishu_ask_user_question"
+    ]
   },
   "channelConfigs": {
     "feishu": {
       "schema": {
-        "type": "object"
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "spinnerPhrases": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Phrases shown alongside the loading spinner during the pre-answer streaming phase. One is picked at random per turn. Empty or unset → 'Processing...'."
+          },
+          "typingEmoji": {
+            "type": "string",
+            "description": "Reaction emoji used as a typing cue. Single emoji name (e.g. 'Get') or comma-separated pool (e.g. 'Get,DONE,JIAYI'). One is picked at random per turn. Default 'Get'."
+          },
+          "replyInThread": {
+            "oneOf": [
+              { "type": "boolean" },
+              { "type": "string", "enum": ["enabled", "disabled"] }
+            ],
+            "description": "Force agent replies into a Lark thread for groups. true | 'enabled' enables. Per-group override available via groups[chatId].replyInThread."
+          },
+          "allowBots": {
+            "oneOf": [
+              { "type": "boolean" },
+              { "type": "string", "enum": ["mentions"] }
+            ],
+            "description": "Bot-sender admission policy. true = allow all bots; false = block; 'mentions' = groups require an @-mention of this bot, DMs pass. Default 'mentions'. Per-group override via groups[chatId].allowBots."
+          },
+          "threadSession": {
+            "type": "boolean",
+            "description": "When true, each Lark thread maintains its own agent session, distinct from the parent chat's session."
+          },
+          "groups": {
+            "type": "object",
+            "description": "Per-group overrides keyed by oc_<chatid>. The wildcard key '*' applies to all groups (including those not explicitly listed). Per-group keys override account-level defaults.",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "enabled": { "type": "boolean", "description": "Disable this group entirely when false." },
+                "groupPolicy": { "type": "string", "enum": ["open", "allowlist", "disabled"] },
+                "requireMention": { "type": "boolean" },
+                "respondToMentionAll": { "type": "boolean" },
+                "skills": { "type": "array", "items": { "type": "string" } },
+                "systemPrompt": { "type": "string" },
+                "tools": {
+                  "type": "object",
+                  "properties": {
+                    "allow": { "type": "array", "items": { "type": "string" } },
+                    "deny": { "type": "array", "items": { "type": "string" } }
+                  }
+                },
+                "allowFrom": {
+                  "oneOf": [
+                    { "type": "string" },
+                    { "type": "array", "items": { "type": "string" } }
+                  ]
+                },
+                "allowBots": {
+                  "oneOf": [
+                    { "type": "boolean" },
+                    { "type": "string", "enum": ["mentions"] }
+                  ]
+                },
+                "replyInThread": {
+                  "oneOf": [
+                    { "type": "boolean" },
+                    { "type": "string", "enum": ["enabled", "disabled"] }
+                  ]
+                }
+              }
+            }
+          }
+        }
       }
     }
   }

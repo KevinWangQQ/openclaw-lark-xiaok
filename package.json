@@ -1,8 +1,13 @@
 {
-  "name": "@larksuite/openclaw-lark",
-  "version": "2026.4.1",
-  "description": "OpenClaw Lark/Feishu channel plugin",
-  "type": "module",
+  "name": "@xiaok/openclaw-lark-extended",
+  "version": "0.2.0",
+  "description": "XiaoK-maintained fork of @larksuite/openclaw-lark, tracking upstream and carrying Feishu/Lark group-context, sender-name enrichment, message-read, and social extensions.",
+  "license": "MIT",
+  "author": "Lucien",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KevinWangQQ/openclaw-lark-xiaok.git"
+  },
   "exports": {
     ".": {
       "import": {
@@ -11,33 +16,32 @@
       }
     }
   },
-  "main": "./dist/index.mjs",
-  "types": "./dist/index.d.mts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "bin": {
     "openclaw-lark": "bin/openclaw-lark.js"
   },
   "files": [
-    "bin/",
-    "dist/",
-    "skills/",
-    "openclaw.plugin.json",
-    "README.md",
-    "LICENSE"
+    "**/*"
   ],
+  "keywords": [
+    "openclaw",
+    "feishu",
+    "lark",
+    "channel",
+    "plugin",
+    "fork"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "packageManager": "pnpm@10.32.1",
   "engines": {
     "node": ">=22"
   },
   "scripts": {
-    "build": "tsdown",
-    "release": "node scripts/release.mjs",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "lint": "eslint src/ index.ts",
-    "lint:fix": "eslint src/ index.ts --fix",
-    "typecheck": "tsc --noEmit",
-    "format": "prettier --write src/**/*.ts",
-    "format:check": "prettier --check src/**/*.ts"
+    "smoke": "bash scripts/smoke.sh"
   },
   "dependencies": {
     "@larksuiteoapi/node-sdk": "^1.60.0",
@@ -45,6 +49,9 @@
     "image-size": "^2.0.2",
     "undici-types": "^8.1.0",
     "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "vitest": "^3.0.0"
   },
   "peerDependencies": {
     "openclaw": ">=2026.3.22"
@@ -54,27 +61,9 @@
       "optional": true
     }
   },
-  "devDependencies": {
-    "@eslint/js": "^10.0.1",
-    "@types/node": "^25.2.3",
-    "@types/qrcode": "^1.5.5",
-    "eslint": "^9.39.3",
-    "eslint-plugin-import-x": "^4.16.2",
-    "eslint-plugin-n": "^17.24.0",
-    "execa": "^9.6.0",
-    "fs-extra": "^11.3.2",
-    "globals": "^16.2.0",
-    "minimist": "^1.2.8",
-    "openclaw": "^2026.4.9",
-    "prettier": "^3.8.1",
-    "tsdown": "^0.21.4",
-    "typescript": "^5.9.3",
-    "typescript-eslint": "^8.32.1",
-    "vitest": "^4.1.1"
-  },
   "openclaw": {
     "extensions": [
-      "./dist/index.mjs"
+      "./index.js"
     ],
     "channel": {
       "id": "openclaw-lark",
@@ -82,7 +71,7 @@
       "selectionLabel": "Lark/Feishu (飞书)",
       "docsPath": "/channels/feishu",
       "docsLabel": "feishu",
-      "blurb": "飞书/Lark enterprise messaging with doc/wiki/drive/task/calendar tools.",
+      "blurb": "Feishu/Lark enterprise messaging with doc/wiki/drive/task/calendar tools (extended fork).",
       "aliases": [
         "lark"
       ],
@@ -90,9 +79,13 @@
       "quickstartAllowFrom": true
     },
     "install": {
-      "npmSpec": "@larksuite/openclaw-lark",
+      "npmSpec": "@lucien/openclaw-lark-extended",
       "localPath": "extensions/feishu",
       "defaultChoice": "npm"
     }
-  }
+  },
+  "bugs": {
+    "url": "https://github.com/KevinWangQQ/openclaw-lark-xiaok/issues"
+  },
+  "homepage": "https://github.com/KevinWangQQ/openclaw-lark-xiaok#readme"
 }
