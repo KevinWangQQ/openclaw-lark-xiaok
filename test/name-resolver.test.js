@@ -143,7 +143,7 @@ describe('batchResolveUserNames', () => {
     expect(received).toEqual(['ou_a']);
   });
 
-  it("writes '' sentinel for IDs the API didn't return so subsequent calls don't retry", async () => {
+  it("writes '' sentinel for IDs missing from a non-empty response (recorded but doesn't dedup retries)", async () => {
     const client = makeUatClient(() => ({
       code: 0,
       data: { users: [{ user_id: 'ou_a', name: 'Alice' }] },
@@ -153,14 +153,33 @@ describe('batchResolveUserNames', () => {
       openIds: ['ou_a', 'ou_b'],
       log: () => {},
     });
+    // Sentinel still gets written for "actively missing" (response had users
+    // but ou_b wasn't among them) — useful as a record-of-failure for diagnostics.
     expect(peekUserName(ACCT, 'ou_b')).toBe('');
-    // Second call with the same IDs hits cache for both — no new API.
+    // But sentinel does NOT suppress dedup — second call retries the unresolved
+    // id. Reasoning (post-Phase-4 hotfix): TAT inbound prefetch indiscriminately
+    // sentinels users whose entries returned with empty name fields; if UAT
+    // also dedupped on sentinels, those users would never get a real name resolved.
     await batchResolveUserNames({
       client,
       openIds: ['ou_a', 'ou_b'],
       log: () => {},
     });
-    expect(client.invoke).toHaveBeenCalledTimes(1);
+    expect(client.invoke).toHaveBeenCalledTimes(2);
+  });
+
+  it("does NOT write sentinel when the API returns an empty users array (ambiguous failure → next call retries)", async () => {
+    const client = makeUatClient(() => ({
+      code: 0,
+      data: { users: [] },
+    }));
+    await batchResolveUserNames({
+      client,
+      openIds: ['ou_a'],
+      log: () => {},
+    });
+    // No sentinel written — could be transient / permission scope; let it retry.
+    expect(peekUserName(ACCT, 'ou_a')).toBeUndefined();
   });
 
   it('chunks at 10 IDs per UAT call', async () => {

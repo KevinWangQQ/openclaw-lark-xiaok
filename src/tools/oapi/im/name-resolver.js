@@ -166,11 +166,14 @@ async function batchResolveUserNames(params) {
     for (const id of openIds) {
         if (!id)
             continue;
-        // cache.has() respects TTL; cache.get() returns '' for sentinel
-        if (cache.has(id)) {
-            const v = cache.get(id);
-            if (v)
-                result.set(id, v); // sentinel '' is filtered from the result
+        // Dedup ONLY on real names. '' sentinel (whether written by TAT inbound
+        // prefetch returning empty-name entries, or by an earlier ambiguous
+        // failure here) is treated as a miss so this UAT path retries — TAT
+        // writes empty-name sentinels indiscriminately for users it sees in
+        // inbound, so dedupping on '' would block UAT name resolution forever.
+        const cached = cache.get(id);
+        if (cached) {
+            result.set(id, cached);
         }
         else {
             missing.push(id);

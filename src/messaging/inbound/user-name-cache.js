@@ -72,15 +72,34 @@ async function batchResolveUserNames(params) {
                 if (!openId)
                     continue;
                 const name = item.name || item.display_name || item.nickname || item.en_name || '';
-                cache.set(openId, name);
-                result.set(openId, name);
+                // Safe-set rule (Phase 0 invariant, formerly only enforced on the
+                // UAT side): never overwrite a real cached name with the '' sentinel.
+                // TAT users/batch frequently returns entries with empty name fields
+                // (per the doc comment at top of this file), so writing them via
+                // raw cache.set was poisoning UAT-resolved real names — Jarvis
+                // post-Phase-4 traced reactions' operator_name=null to exactly
+                // this path. Real names always win; sentinels only fill gaps.
+                if (name) {
+                    cache.set(openId, name);
+                    result.set(openId, name);
+                }
+                else {
+                    if (!cache.has(openId)) {
+                        cache.set(openId, '');
+                        result.set(openId, '');
+                    }
+                }
                 resolved.add(openId);
             }
-            // Cache empty names for IDs the API didn't return (no permission, etc.)
-            for (const id of chunk) {
-                if (!resolved.has(id)) {
-                    cache.set(id, '');
-                    result.set(id, '');
+            // Sentinel ambiguously-missing IDs only when the response itself was
+            // non-empty (i.e. the API call worked). Empty users.length is treated
+            // as transient/permission failure — let the next call retry.
+            if (items.length > 0) {
+                for (const id of chunk) {
+                    if (!resolved.has(id) && !cache.has(id)) {
+                        cache.set(id, '');
+                        result.set(id, '');
+                    }
                 }
             }
         }
