@@ -49,6 +49,16 @@ const FeishuChatSchema = typebox_1.Type.Union([
             description: '用户 ID 类型（默认 open_id）',
         })),
     }),
+    // RESOLVE_P2P — open_id 批量反查 P2P chat_id（Phase 4 暴露原本私有的能力）
+    typebox_1.Type.Object({
+        action: typebox_1.Type.Literal('resolve_p2p'),
+        open_ids: typebox_1.Type.Array(typebox_1.Type.String({ description: '用户 open_id（ou_xxx）' }), {
+            description: '要反查 P2P chat_id 的 open_id 列表。返回 Map<open_id, chat_id>。' +
+                '没有历史会话的 open_id 不会出现在返回中',
+            minItems: 1,
+            maxItems: 50,
+        }),
+    }),
 ]);
 // ---------------------------------------------------------------------------
 // Registration
@@ -61,7 +71,10 @@ function registerChatSearchTool(api) {
     return (0, helpers_1.registerTool)(api, {
         name: 'feishu_chat',
         label: 'Feishu: Chat Management',
-        description: '以用户身份调用飞书群聊管理工具。Actions: search（搜索群列表，支持关键词匹配群名称、群成员）, get（获取指定群的详细信息，包括群名称、描述、头像、群主、权限配置等）。',
+        description: '以用户身份调用飞书群聊管理工具。Actions:' +
+            '\n- search：搜索群列表，支持关键词匹配群名称、群成员' +
+            '\n- get：获取指定群的详细信息（含 owner_name / chat_creator_name 自动 enrich）' +
+            '\n- resolve_p2p：批量反查 open_id → P2P chat_id 映射（无历史会话的 open_id 不出现在返回中）',
         parameters: FeishuChatSchema,
         async execute(_toolCallId, params) {
             const p = params;
@@ -136,6 +149,33 @@ function registerChatSearchTool(api) {
                         return (0, helpers_1.json)({
                             chat: data,
                         });
+                    }
+                    // -----------------------------------------------------------------
+                    // RESOLVE_P2P — open_id[] → {open_id → chat_id}
+                    // Phase 4 暴露原本只在 message-read.js 内部用的 chat_p2p/batch_query。
+                    // -----------------------------------------------------------------
+                    case 'resolve_p2p': {
+                        const openIds = [...new Set(p.open_ids ?? [])];
+                        log.info(`resolve_p2p: ${openIds.length} open_ids`);
+                        if (openIds.length === 0) {
+                            return (0, helpers_1.json)({ p2p_chats: {} });
+                        }
+                        const res = await client.invokeByPath('feishu_chat.resolve_p2p', '/open-apis/im/v1/chat_p2p/batch_query', {
+                            method: 'POST',
+                            body: { chatter_ids: openIds },
+                            query: { user_id_type: 'open_id' },
+                            as: 'user',
+                        });
+                        if (res.code !== 0) {
+                            return (0, helpers_1.json)({ error: `API error: code=${res.code} msg=${res.msg}` });
+                        }
+                        const map = {};
+                        for (const c of res.data?.p2p_chats ?? []) {
+                            if (c?.chatter_id && c?.chat_id) {
+                                map[c.chatter_id] = c.chat_id;
+                            }
+                        }
+                        return (0, helpers_1.json)({ p2p_chats: map });
                     }
                 }
             }

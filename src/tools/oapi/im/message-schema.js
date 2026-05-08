@@ -142,5 +142,36 @@ const FeishuImMessageSchema = typebox_1.Type.Union([
         })),
         page_token: typebox_1.Type.Optional(typebox_1.Type.String({ description: '分页标记' })),
     }),
+    // MGET — 批量取消息详情（Phase 4 暴露已有内部能力）
+    typebox_1.Type.Object({
+        action: typebox_1.Type.Literal('mget'),
+        message_ids: typebox_1.Type.Array(typebox_1.Type.String({ description: '消息 ID（om_xxx 格式）' }), {
+            description: '消息 ID 列表，每次最多 50 个。返回 enrichment 后的详情列表',
+            minItems: 1,
+            maxItems: 50,
+        }),
+    }),
+    // REACTIONS — 读消息表情回复（Phase 4 全新）
+    typebox_1.Type.Object({
+        action: typebox_1.Type.Literal('reactions'),
+        message_id: typebox_1.Type.String({ description: '消息 ID（om_xxx 格式）' }),
+        reaction_type: typebox_1.Type.Optional(typebox_1.Type.String({
+            description: '可选：仅返回指定 emoji_type 的 reactions（如 SMILE）。为空则返回全部',
+        })),
+        page_size: typebox_1.Type.Optional(typebox_1.Type.Integer({
+            description: '分页大小（默认20）',
+            minimum: 1,
+            maximum: 50,
+        })),
+        page_token: typebox_1.Type.Optional(typebox_1.Type.String({ description: '分页标记' })),
+    }),
+    // RESOLVE_URL — IM 链接 → ids（纯本地 regex，不打 API）
+    typebox_1.Type.Object({
+        action: typebox_1.Type.Literal('resolve_url'),
+        url: typebox_1.Type.String({
+            description: '飞书/Lark IM 消息或群链接（含 om_xxx / oc_xxx / omt_xxx）。' +
+                '云文档链接此 action 不处理，会返回 {resolved:false, reason:"not_im_url"}',
+        }),
+    }),
 ]);
 exports.FeishuImMessageSchema = FeishuImMessageSchema;
