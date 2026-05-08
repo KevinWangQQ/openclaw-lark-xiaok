@@ -13,6 +13,11 @@
  *   https://{tenant}.feishu.cn/messenger/chat/oc_xxx
  *   https://{tenant}.larksuite.com/...   (Lark international)
  *
+ * NOT supported (intentional):
+ *   - applink.feishu.cn/...?token=<opaque>   (encrypted; no plaintext id in URL — would
+ *     need an async unwrap call, out of scope for a pure-regex parser)
+ *   - cloud-doc URLs (/wiki/, /docx/, /sheets/, /drive/) — drive tool territory
+ *
  * Returns:
  *   {resolved: true,  chat_id?: string, message_id?: string, thread_id?: string}
  *   {resolved: false, reason: string}                  (URL didn't match any IM shape)

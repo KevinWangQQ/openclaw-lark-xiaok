@@ -216,6 +216,11 @@ async function executeMgetMessages(params, ctx) {
 }
 // ---------------------------------------------------------------------------
 // Read action: reactions (read /im/v1/messages/:id/reactions/list)
+// Hotfix (post-Phase-4): switched from invokeByPath to client.invoke +
+// sdk.request — the canonical pattern (mirrors user-name-uat.js). The
+// invokeByPath path tripped a JSON parse error ("Unexpected non-whitespace
+// character after JSON at position 4") on some Feishu reactions responses;
+// going through the SDK's typed request handler avoids it.
 // ---------------------------------------------------------------------------
 async function executeReactions(params, ctx) {
     const { config, log, toolClient } = ctx;
@@ -224,20 +229,19 @@ async function executeReactions(params, ctx) {
         const client = toolClient();
         const account = (0, helpers_1.getFirstAccount)(config);
         const logFn = (...args) => log.info(args.map(String).join(' '));
-        const queryParams = new URLSearchParams({ user_id_type: 'open_id' });
-        if (p.reaction_type)
-            queryParams.set('reaction_type', p.reaction_type);
-        if (p.page_size)
-            queryParams.set('page_size', String(p.page_size));
-        if (p.page_token)
-            queryParams.set('page_token', p.page_token);
         log.info(`reactions: message_id=${p.message_id}, reaction_type=${p.reaction_type ?? '*'}`);
-        const res = await client.invokeByPath('feishu_im_user_message.reactions', `/open-apis/im/v1/messages/${encodeURIComponent(p.message_id)}/reactions/list?${queryParams}`, {
+        const res = await client.invoke('feishu_im_user_message.reactions', (sdk, opts) => sdk.request({
             method: 'GET',
-            as: 'user',
-        });
-        if (res.code !== 0) {
-            return (0, helpers_1.json)({ error: `API error: code=${res.code} msg=${res.msg}` });
+            url: `/open-apis/im/v1/messages/${encodeURIComponent(p.message_id)}/reactions/list`,
+            params: {
+                user_id_type: 'open_id',
+                ...(p.reaction_type ? { reaction_type: p.reaction_type } : {}),
+                ...(p.page_size ? { page_size: p.page_size } : {}),
+                ...(p.page_token ? { page_token: p.page_token } : {}),
+            },
+        }, opts), { as: 'user' });
+        if (res?.code !== 0) {
+            return (0, helpers_1.json)({ error: `API error: code=${res?.code} msg=${res?.msg}` });
         }
         const items = res.data?.items ?? [];
         // Enrich reactor names through the shared resolver. UAT batch_basic

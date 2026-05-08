@@ -160,19 +160,35 @@ function registerChatSearchTool(api) {
                         if (openIds.length === 0) {
                             return (0, helpers_1.json)({ p2p_chats: {} });
                         }
-                        const res = await client.invokeByPath('feishu_chat.resolve_p2p', '/open-apis/im/v1/chat_p2p/batch_query', {
+                        // Hotfix (post-Phase-4): switched from invokeByPath to canonical
+                        // client.invoke + sdk.request. The original code also assumed the
+                        // response shape was `{p2p_chats: [{chatter_id, chat_id}]}`, but
+                        // the API returns items WITHOUT chatter_id (likely positional
+                        // alignment with the request). Now we (a) try several plausible
+                        // field names, (b) fall back to positional alignment, (c) log
+                        // the raw item shape on the first call so we can confirm.
+                        const res = await client.invoke('feishu_chat.resolve_p2p', (sdk, opts) => sdk.request({
                             method: 'POST',
-                            body: { chatter_ids: openIds },
-                            query: { user_id_type: 'open_id' },
-                            as: 'user',
-                        });
-                        if (res.code !== 0) {
-                            return (0, helpers_1.json)({ error: `API error: code=${res.code} msg=${res.msg}` });
+                            url: '/open-apis/im/v1/chat_p2p/batch_query',
+                            data: { chatter_ids: openIds },
+                            params: { user_id_type: 'open_id' },
+                        }, opts), { as: 'user' });
+                        if (res?.code !== 0) {
+                            return (0, helpers_1.json)({ error: `API error: code=${res?.code} msg=${res?.msg}` });
+                        }
+                        const items = res.data?.p2p_chats ?? [];
+                        if (items.length > 0) {
+                            log.info(`resolve_p2p: response item keys = ${Object.keys(items[0] || {}).join(',')}`);
                         }
                         const map = {};
-                        for (const c of res.data?.p2p_chats ?? []) {
-                            if (c?.chatter_id && c?.chat_id) {
-                                map[c.chatter_id] = c.chat_id;
+                        for (let i = 0; i < items.length; i++) {
+                            const c = items[i];
+                            if (!c?.chat_id)
+                                continue;
+                            const inputId = openIds[i];
+                            const chatterId = c.chatter_id ?? c.open_id ?? c.user_id ?? c.id ?? inputId;
+                            if (chatterId) {
+                                map[chatterId] = c.chat_id;
                             }
                         }
                         return (0, helpers_1.json)({ p2p_chats: map });
