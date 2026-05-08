@@ -193,8 +193,18 @@ async function batchResolveUserNames(params) {
             }, opts), { as: 'user' });
             const users = res?.data?.users ?? [];
             const resolved = new Set();
+            // First-call diagnostic: log response shape so the actual field name is
+            // visible in fbs-debug. Cheap, only runs when the chunk has any user
+            // entries (post-Phase-4 hotfix to root-cause why operator_name stayed
+            // null after a successful resolving run).
+            if (users.length > 0) {
+                log(`name-resolver.user: response sample — data keys=[${Object.keys(res?.data || {}).join(',')}], first user keys=[${Object.keys(users[0] || {}).join(',')}]`);
+            }
             for (const user of users) {
-                const openId = user.user_id;
+                // Support multiple field names: basic_batch returns user_id (per
+                // Feishu docs), but the same SDK has been observed to return
+                // open_id on similar endpoints. Try both before giving up.
+                const openId = user.user_id ?? user.open_id ?? user.id;
                 const rawName = user.name;
                 const name = typeof rawName === 'string' ? rawName : rawName?.value;
                 if (openId && name) {
