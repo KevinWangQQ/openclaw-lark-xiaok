@@ -5,31 +5,33 @@
  *
  * Inbound message handling pipeline for the Lark/Feishu channel plugin.
  *
- * Orchestrates a seven-stage pipeline:
+ * Orchestrates a nine-stage pipeline:
  *   1. Account resolution
  *   2. Event parsing         → parse.ts (merge_forward expanded in-place)
- *   3. Sender enrichment     → enrich.ts (lightweight, before gate)
- *   4. Policy gate           → gate.ts
- *   5. User name prefetch    → enrich.ts (batch cache warm-up)
- *   6. Content resolution    → enrich.ts (media / quote, parallel)
- *   7. Agent dispatch        → dispatch.ts
+ *   3. Empty-message guard   → early return for text-less, media-less messages
+ *   4. Sender enrichment     → enrich.ts (lightweight, before gate)
+ *   5. Policy gate           → gate.ts
+ *   6. User name prefetch    → enrich.ts (batch cache warm-up)
+ *   7. Content resolution    → enrich.ts (media / quote, parallel)
+ *   8. Command authorization → plugin-sdk/command-auth
+ *   9. Agent dispatch        → dispatch.ts
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.handleFeishuMessage = handleFeishuMessage;
 const reply_history_1 = require("openclaw/plugin-sdk/reply-history");
 const command_auth_1 = require("openclaw/plugin-sdk/command-auth");
 const allow_from_1 = require("openclaw/plugin-sdk/allow-from");
-const accounts_1 = require("../../core/accounts.js");
-const lark_client_1 = require("../../core/lark-client.js");
-const lark_logger_1 = require("../../core/lark-logger.js");
-const lark_ticket_1 = require("../../core/lark-ticket.js");
-const chat_queue_1 = require("../../channel/chat-queue.js");
-const parse_1 = require("./parse.js");
-const enrich_1 = require("./enrich.js");
-const gate_1 = require("./gate.js");
-const handler_registry_1 = require("./handler-registry.js");
-const dispatch_1 = require("./dispatch.js");
-const policy_1 = require("./policy.js");
+const accounts_1 = require("../../core/accounts");
+const lark_client_1 = require("../../core/lark-client");
+const lark_logger_1 = require("../../core/lark-logger");
+const lark_ticket_1 = require("../../core/lark-ticket");
+const chat_queue_1 = require("../../channel/chat-queue");
+const parse_1 = require("./parse");
+const enrich_1 = require("./enrich");
+const gate_1 = require("./gate");
+const handler_registry_1 = require("./handler-registry");
+const dispatch_1 = require("./dispatch");
+const policy_1 = require("./policy");
 const logger = (0, lark_logger_1.larkLogger)('inbound/handler');
 // ---------------------------------------------------------------------------
 // Public: handle inbound message
@@ -60,7 +62,16 @@ async function handleFeishuMessage(params) {
         cfg: accountScopedCfg,
         accountId: account.accountId,
     });
-    // 3. Enrich (lightweight): sender name + permission error tracking
+    // 3. Early reject: skip empty-text messages with no media resources.
+    //    OpenClaw 2026.4.29 adds a core-side guard for this (##74634), but
+    //    rejecting here avoids wasting cycles on enrichment, gate, and
+    //    dispatch for messages that would be silently dropped at the deliver
+    //    callback anyway.
+    if (!ctx.content.trim() && ctx.resources.length === 0) {
+        log(`feishu[${account.accountId}]: empty message ${ctx.messageId} (no text, no media), skipping`);
+        return;
+    }
+    // 4. Enrich (lightweight): sender name + permission error tracking
     const { ctx: enrichedCtx, permissionError } = await (0, enrich_1.resolveSenderInfo)({
         ctx,
         account,
@@ -70,7 +81,7 @@ async function handleFeishuMessage(params) {
     log(`feishu[${account.accountId}]: received message from ${ctx.senderId} in ${ctx.chatId} (${ctx.chatType})`);
     logger.info(`received from ${ctx.senderId} in ${ctx.chatId} (${ctx.chatType})`);
     const historyLimit = Math.max(0, accountFeishuCfg?.historyLimit ?? accountScopedCfg.messages?.groupChat?.historyLimit ?? reply_history_1.DEFAULT_GROUP_HISTORY_LIMIT);
-    // 4. Gate: policy / access-control checks (skipped for synthetic messages)
+    // 5. Gate: policy / access-control checks (skipped for synthetic messages)
     const gate = forceMention
         ? { allowed: true }
         : await (0, gate_1.checkMessageGate)({ ctx, accountFeishuCfg, account, accountScopedCfg, log });
@@ -90,15 +101,15 @@ async function handleFeishuMessage(params) {
         }
         return;
     }
-    // 5. Batch pre-warm user name cache (sender + mentions)
+    // 6. Batch pre-warm user name cache (sender + mentions)
     await (0, enrich_1.prefetchUserNames)({ ctx, account, log });
-    // 6. Enrich (heavyweight, after gate — parallel where possible)
+    // 7. Enrich (heavyweight, after gate — parallel where possible)
     const enrichParams = { ctx, accountScopedCfg, account, log };
     const [mediaResult, quotedContent] = await Promise.all([
         (0, enrich_1.resolveMedia)(enrichParams),
         (0, enrich_1.resolveQuotedContent)(enrichParams),
     ]);
-    // 6b. Replace Feishu file-key placeholders in content with local
+    // 7b. Replace Feishu file-key placeholders in content with local
     //     file paths so the SDK can detect images for native vision and
     //     the AI receives meaningful file references.
     if (mediaResult.mediaList.length > 0) {
@@ -107,7 +118,7 @@ async function handleFeishuMessage(params) {
             content: (0, enrich_1.substituteMediaPaths)(ctx.content, mediaResult.mediaList),
         };
     }
-    // 7. Compute commandAuthorized via SDK access group command gating
+    // 8. Compute commandAuthorized via SDK access group command gating
     const core = lark_client_1.LarkClient.runtime;
     const isGroup = ctx.chatType === 'group';
     const dmPolicy = accountFeishuCfg?.dmPolicy ?? 'pairing';
@@ -152,7 +163,7 @@ async function handleFeishuMessage(params) {
         shouldComputeCommandAuthorized: core.channel.commands.shouldComputeCommandAuthorized,
         resolveCommandAuthorizedFromAuthorizers: core.channel.commands.resolveCommandAuthorizedFromAuthorizers,
     });
-    // 8. Dispatch to agent
+    // 9. Dispatch to agent
     // groupConfig and defaultGroupConfig are already resolved above.
     try {
         await (0, dispatch_1.dispatchToAgent)({

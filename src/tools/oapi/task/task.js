@@ -20,8 +20,8 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.registerFeishuTaskTaskTool = registerFeishuTaskTaskTool;
 const typebox_1 = require("@sinclair/typebox");
-const helpers_1 = require("../helpers.js");
-const raw_request_1 = require("../../../core/raw-request.js");
+const helpers_1 = require("../helpers");
+const raw_request_1 = require("../../../core/raw-request");
 // ---------------------------------------------------------------------------
 // Schema
 // ---------------------------------------------------------------------------

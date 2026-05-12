@@ -23,6 +23,8 @@ export interface SendFeishuMessageParams {
     accountId?: string;
     /** When true, the reply appears in the thread instead of main chat. */
     replyInThread?: boolean;
+    /** Thread root id when the reply lives inside a thread; used for sentinel keying. */
+    threadId?: string;
     /**
      * Optional multi-locale texts for i18n post messages.
      * When provided, builds a multi-locale post structure (e.g. { zh_cn: ..., en_us: ... })

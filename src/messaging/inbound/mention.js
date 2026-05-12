@@ -21,7 +21,7 @@ exports.formatMentionForCard = formatMentionForCard;
 exports.formatMentionAllForCard = formatMentionAllForCard;
 exports.buildMentionedMessage = buildMentionedMessage;
 exports.buildMentionedCardContent = buildMentionedCardContent;
-const utils_1 = require("../converters/utils.js");
+const utils_1 = require("../converters/utils");
 // ---------------------------------------------------------------------------
 // Derive helpers (work on MentionInfo[])
 // ---------------------------------------------------------------------------
@@ -34,11 +34,11 @@ const utils_1 = require("../converters/utils.js");
 function isMentionAll(mention) {
     return mention.key === '@_all';
 }
-/** Whether the bot was @-mentioned. */
+/** Whether the receiving bot itself was @-mentioned. */
 function mentionedBot(ctx) {
     return ctx.mentions.some((m) => m.isBot);
 }
-/** All non-bot mentions. */
+/** All mentions excluding the receiving bot itself. */
 function nonBotMentions(ctx) {
     return ctx.mentions.filter((m) => !m.isBot);
 }

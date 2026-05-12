@@ -16,26 +16,53 @@ exports.buildBodyForAgent = buildBodyForAgent;
 exports.buildInboundPayload = buildInboundPayload;
 exports.buildEnvelopeWithHistory = buildEnvelopeWithHistory;
 const reply_history_1 = require("openclaw/plugin-sdk/reply-history");
-const chat_queue_1 = require("../../channel/chat-queue.js");
-const mention_1 = require("./mention.js");
+const chat_queue_1 = require("../../channel/chat-queue");
+const mention_1 = require("./mention");
 // ---------------------------------------------------------------------------
 // Mention annotation
 // ---------------------------------------------------------------------------
+const MENTION_USAGE_HINT = 'To @mention in a reply, use `<at user_id="ou_xxx">Name</at>`; plain "@Name" won\'t notify.';
 /**
  * Build a `[System: ...]` mention annotation when the message @-mentions
- * non-bot users.  Returns `undefined` when there are no user mentions.
+ * non-self-bot users or when the previous reply had unresolved mentions.
+ * Returns `undefined` when there is nothing to report.
  *
  * Sender identity / chat metadata are handled by the SDK's own
  * `buildInboundUserContextPrefix` (via SenderId, SenderName, ReplyToBody,
  * InboundHistory, etc.), so we only inject the mention data that the SDK
  * does not natively support.
  */
-function buildMentionAnnotation(ctx) {
-    const mentions = (0, mention_1.nonBotMentions)(ctx);
+function buildMentionAnnotation(ctx, sentinels) {
+    const sections = [
+        formatMentionList((0, mention_1.nonBotMentions)(ctx)),
+        formatSentinelFeedback(sentinels),
+    ].filter((s) => !!s);
+    if (sections.length === 0)
+        return undefined;
+    sections.push(MENTION_USAGE_HINT);
+    return `[System: ${sections.join(' ')}]`;
+}
+function formatMentionList(mentions) {
     if (mentions.length === 0)
         return undefined;
-    const mentionDetails = mentions.map((t) => `${t.name} (open_id: ${t.openId})`).join(', ');
-    return `[System: This message @mentions the following users: ${mentionDetails}. Use these open_ids when performing actions involving these users. To @mention in a reply, use \`<at user_id="ou_xxx">Name</at>\`; plain "@Name" won't notify.]`;
+    const details = mentions.map((t) => `${t.name} (open_id: ${t.openId})`).join(', ');
+    return (`This message @mentions the following users: ${details}. ` +
+        `Use these open_ids when performing actions involving these users.`);
+}
+function formatSentinelFeedback(sentinels) {
+    if (!sentinels || sentinels.length === 0)
+        return undefined;
+    const lines = sentinels.map((s) => {
+        if (s.reason === 'not_found') {
+            return `"@${s.name}" was not recognized in the chat`;
+        }
+        if (s.reason === 'ambiguous' && s.candidates && s.candidates.length > 0) {
+            const ids = s.candidates.map((c) => c.openId).join(' / ');
+            return `"@${s.name}" matched multiple users (${ids}); use explicit <at user_id="...">`;
+        }
+        return `"@${s.name}" failed to resolve`;
+    });
+    return `Previous reply had unresolved mentions: ${lines.join('; ')}.`;
 }
 // ---------------------------------------------------------------------------
 // Message body builders
@@ -49,21 +76,14 @@ function buildMentionAnnotation(ctx) {
  * the body cleaner and avoiding misleading heuristics for non-text
  * message types (merge_forward, interactive cards, etc.).
  */
-function buildMessageBody(ctx, quotedContent) {
+function buildMessageBody(ctx, quotedContent, sentinels) {
     let messageBody = ctx.content;
     if (quotedContent) {
         messageBody = `[Replying to: "${quotedContent}"]\n\n${ctx.content}`;
     }
     const speaker = ctx.senderName ?? ctx.senderId;
-    // Group turns get a stable [name](open_id) prefix so the agent can disambiguate
-    // multi-sender conversations; DM keeps the cleaner "name: msg" form
-    // (fork plan §4 #5, sender-labeling site B).
-    if (ctx.chatType === 'group' && ctx.senderId) {
-        messageBody = `[${speaker}](${ctx.senderId}): ${messageBody}`;
-    } else {
-        messageBody = `${speaker}: ${messageBody}`;
-    }
-    const mentionAnnotation = buildMentionAnnotation(ctx);
+    messageBody = `${speaker}: ${messageBody}`;
+    const mentionAnnotation = buildMentionAnnotation(ctx, sentinels);
     if (mentionAnnotation) {
         messageBody += `\n\n${mentionAnnotation}`;
     }
@@ -88,8 +108,8 @@ function buildMessageBody(ctx, quotedContent) {
  * The SDK's `detectAndLoadPromptImages` will discover image paths from
  * the text and inject them as multimodal content blocks.
  */
-function buildBodyForAgent(ctx) {
-    const mentionAnnotation = buildMentionAnnotation(ctx);
+function buildBodyForAgent(ctx, sentinels) {
+    const mentionAnnotation = buildMentionAnnotation(ctx, sentinels);
     if (mentionAnnotation) {
         return `${ctx.content}\n\n${mentionAnnotation}`;
     }

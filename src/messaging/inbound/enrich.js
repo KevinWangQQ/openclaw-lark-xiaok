@@ -28,10 +28,10 @@ exports.prefetchUserNames = prefetchUserNames;
 exports.resolveMedia = resolveMedia;
 exports.substituteMediaPaths = substituteMediaPaths;
 exports.resolveQuotedContent = resolveQuotedContent;
-const fetch_1 = require("../outbound/fetch.js");
-const permission_1 = require("./permission.js");
-const user_name_cache_1 = require("./user-name-cache.js");
-const media_resolver_1 = require("./media-resolver.js");
+const fetch_1 = require("../outbound/fetch");
+const permission_1 = require("./permission");
+const user_name_cache_1 = require("./user-name-cache");
+const media_resolver_1 = require("./media-resolver");
 // ---------------------------------------------------------------------------
 // Phase 1: Sender info (lightweight, before gate)
 // ---------------------------------------------------------------------------
@@ -65,22 +65,6 @@ async function resolveSenderInfo(params) {
     }
     else if (senderResult.permissionError) {
         log(`sender resolve failed: permission error code=${senderResult.permissionError.code}`);
-    }
-    // If the OAPI returned no name (missing permission, empty cache, or an
-    // unknown sender), consult the optional feishu-social registry when it's
-    // configured. This call is a no-op when social.enabled is false — see
-    // src/extensions/feishu-social/index.js for the registry's data source.
-    if (!ctx.senderName && ctx.senderId) {
-        try {
-            const social = require('../../extensions/feishu-social/index.js');
-            const local = social.lookupMemberName?.(ctx.senderId);
-            if (local?.name) {
-                ctx = { ...ctx, senderName: local.name };
-                log(`sender resolved via feishu-social ${local.source}: ${local.name}`);
-            }
-        } catch (_) {
-            // social extension not loaded — keep ctx.senderName undefined
-        }
     }
     // Track permission errors (with cooldown)
     let permissionError;

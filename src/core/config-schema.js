@@ -106,7 +106,6 @@ const DedupSchema = zod_1.z
 })
     .optional();
 const AllowBotsSchema = zod_1.z.union([zod_1.z.boolean(), zod_1.z.literal('mentions')]).optional();
-const ReplyInThreadSchema = zod_1.z.union([zod_1.z.boolean(), zod_1.z.literal('enabled'), zod_1.z.literal('disabled')]).optional();
 const ReactionNotificationModeSchema = zod_1.z.enum(['off', 'own', 'all']).optional();
 exports.UATConfigSchema = zod_1.z
     .object({
@@ -133,7 +132,6 @@ exports.FeishuGroupSchema = zod_1.z.object({
     allowFrom: AllowFromSchema,
     systemPrompt: zod_1.z.string().optional(),
     allowBots: AllowBotsSchema,
-    replyInThread: ReplyInThreadSchema,
 });
 // ---------------------------------------------------------------------------
 // Account config schema (same shape as top-level minus `accounts`)
@@ -181,9 +179,6 @@ exports.FeishuAccountConfigSchema = zod_1.z.object({
     reactionNotifications: ReactionNotificationModeSchema,
     threadSession: zod_1.z.boolean().optional(),
     allowBots: AllowBotsSchema,
-    replyInThread: ReplyInThreadSchema,
-    spinnerPhrases: zod_1.z.array(zod_1.z.string()).optional(),
-    typingEmoji: zod_1.z.string().optional(),
     uat: exports.UATConfigSchema,
 });
 // ---------------------------------------------------------------------------

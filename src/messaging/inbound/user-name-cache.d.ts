@@ -54,6 +54,18 @@ export declare function resolveBotName(params: {
     log: (...args: unknown[]) => void;
 }): Promise<ResolveUserNameResult>;
 /**
+ * Fetches the bot members of a chat via
+ * `GET /open-apis/im/v1/chats/{chat_id}/members/bots` and writes them
+ * to the per-account cache.
+ */
+export declare function prefetchChatBots(account: LarkAccount, chatId: string, log: (...args: unknown[]) => void): Promise<void>;
+/**
+ * Fetches the human members of a chat via
+ * `GET /open-apis/im/v1/chats/{chat_id}/members` and writes them to
+ * the per-account cache.
+ */
+export declare function prefetchChatMembers(account: LarkAccount, chatId: string, log: (...args: unknown[]) => void): Promise<void>;
+/**
  * Resolve a single user's display name.
  *
  * Checks the account-scoped cache first, then falls back to the
