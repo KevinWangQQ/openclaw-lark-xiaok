@@ -15,25 +15,25 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.createFeishuReplyDispatcher = createFeishuReplyDispatcher;
 const channel_runtime_1 = require("openclaw/plugin-sdk/channel-runtime");
 const channel_feedback_1 = require("openclaw/plugin-sdk/channel-feedback");
-const accounts_1 = require("../core/accounts.js");
-const footer_config_1 = require("../core/footer-config.js");
-const lark_client_1 = require("../core/lark-client.js");
-const lark_logger_1 = require("../core/lark-logger.js");
-const deliver_1 = require("../messaging/outbound/deliver.js");
-const send_1 = require("../messaging/outbound/send.js");
-const typing_1 = require("../messaging/outbound/typing.js");
-const builder_1 = require("./builder.js");
-const card_error_1 = require("./card-error.js");
-const reply_mode_1 = require("./reply-mode.js");
-const streaming_card_controller_1 = require("./streaming-card-controller.js");
-const unavailable_guard_1 = require("./unavailable-guard.js");
+const accounts_1 = require("../core/accounts");
+const footer_config_1 = require("../core/footer-config");
+const lark_client_1 = require("../core/lark-client");
+const lark_logger_1 = require("../core/lark-logger");
+const deliver_1 = require("../messaging/outbound/deliver");
+const send_1 = require("../messaging/outbound/send");
+const typing_1 = require("../messaging/outbound/typing");
+const builder_1 = require("./builder");
+const card_error_1 = require("./card-error");
+const reply_mode_1 = require("./reply-mode");
+const streaming_card_controller_1 = require("./streaming-card-controller");
+const unavailable_guard_1 = require("./unavailable-guard");
 const log = (0, lark_logger_1.larkLogger)('card/reply-dispatcher');
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 function createFeishuReplyDispatcher(params) {
     const core = lark_client_1.LarkClient.runtime;
-    const { cfg, agentId, chatId, sessionKey, replyToMessageId, accountId, replyInThread } = params;
+    const { cfg, agentId, chatId, sessionKey, replyToMessageId, accountId, replyInThread, threadId } = params;
     // Resolve account so we can read per-account config (e.g. replyMode)
     const account = (0, accounts_1.getLarkAccount)(cfg, accountId);
     const feishuCfg = account.config;
@@ -243,6 +243,7 @@ function createFeishuReplyDispatcher(params) {
                                     replyToMessageId,
                                     replyInThread,
                                     accountId,
+                                    threadId,
                                 });
                             }
                             catch (fallbackErr) {
@@ -277,6 +278,7 @@ function createFeishuReplyDispatcher(params) {
                                         replyToMessageId,
                                         replyInThread,
                                         accountId,
+                                        threadId,
                                     });
                                 }
                                 catch (fallbackErr) {
@@ -306,6 +308,7 @@ function createFeishuReplyDispatcher(params) {
                                 replyToMessageId,
                                 replyInThread,
                                 accountId,
+                                threadId,
                             });
                         }
                         catch (err) {

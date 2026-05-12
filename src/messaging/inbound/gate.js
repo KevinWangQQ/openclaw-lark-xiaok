@@ -28,10 +28,10 @@ exports.resolveRespondToMentionAll = resolveRespondToMentionAll;
 exports.resolveAllowBots = resolveAllowBots;
 exports.readFeishuAllowFromStore = readAllowFromStore;
 exports.checkMessageGate = checkMessageGate;
-const lark_client_1 = require("../../core/lark-client.js");
-const policy_1 = require("./policy.js");
-const mention_1 = require("./mention.js");
-const gate_effects_1 = require("./gate-effects.js");
+const lark_client_1 = require("../../core/lark-client");
+const policy_1 = require("./policy");
+const mention_1 = require("./mention");
+const gate_effects_1 = require("./gate-effects");
 /**
  * Resolve the effective `respondToMentionAll` setting.
  *

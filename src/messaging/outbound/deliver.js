@@ -5,14 +5,17 @@ exports.sendTextLark = sendTextLark;
 exports.sendCardLark = sendCardLark;
 exports.sendMediaLark = sendMediaLark;
 exports.sendCommentReplyLark = sendCommentReplyLark;
-const accounts_1 = require("../../core/accounts.js");
-const lark_client_1 = require("../../core/lark-client.js");
-const targets_1 = require("../../core/targets.js");
-const comment_target_1 = require("../../core/comment-target.js");
-const markdown_style_1 = require("../../card/markdown-style.js");
-const api_error_1 = require("../../core/api-error.js");
-const lark_logger_1 = require("../../core/lark-logger.js");
-const media_1 = require("./media.js");
+const accounts_1 = require("../../core/accounts");
+const lark_client_1 = require("../../core/lark-client");
+const chat_queue_1 = require("../../channel/chat-queue");
+const targets_1 = require("../../core/targets");
+const comment_target_1 = require("../../core/comment-target");
+const markdown_style_1 = require("../../card/markdown-style");
+const api_error_1 = require("../../core/api-error");
+const lark_logger_1 = require("../../core/lark-logger");
+const sentinel_store_1 = require("../inbound/sentinel-store");
+const media_1 = require("./media");
+const normalize_mentions_1 = require("./normalize-mentions");
 const log = (0, lark_logger_1.larkLogger)('outbound/deliver');
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -28,27 +31,35 @@ function buildPostContent(text) {
     });
 }
 /**
- * Normalise `<at>` mention tags that the AI frequently writes incorrectly.
+ * Pre-processes text before Feishu delivery. Runs the full mention
+ * normalizer (tag rewrite + plain `@Name` resolution + `@all` aliases),
+ * markdown-table conversion, and Markdown style optimization.
  *
- * Correct Feishu syntax:
- *   `<at user_id="ou_xxx">name</at>`   — mention a user
- *   `<at user_id="all"></at>`           — mention everyone
- *
- * Common AI mistakes this function fixes:
- *   `<at id=all></at>`           → `<at user_id="all"></at>`
- *   `<at id="ou_xxx"></at>`      → `<at user_id="ou_xxx"></at>`
- *   `<at open_id="ou_xxx"></at>` → `<at user_id="ou_xxx"></at>`
- *   `<at user_id=ou_xxx></at>`   → `<at user_id="ou_xxx"></at>`
+ * Falls back to the raw text on any normalizer failure so a parser bug
+ * never blocks send. Sentinels collected during normalization are
+ * returned for the caller to record after the send succeeds.
  */
-function normalizeAtMentions(text) {
-    return text.replace(/<at\s+(?:id|open_id|user_id)\s*=\s*"?([^">\s]+)"?\s*>/gi, '<at user_id="$1">');
-}
-/**
- * Pre-process text for Lark rendering:
- * mention normalisation + table conversion + style optimization.
- */
-function prepareTextForLark(cfg, text, accountId) {
-    let processed = normalizeAtMentions(text);
+async function prepareTextForLark(cfg, text, to, accountId) {
+    let processed = text;
+    let sentinels = [];
+    let resolvedAccountId = accountId;
+    if (text?.trim()) {
+        try {
+            const account = (0, accounts_1.getLarkAccount)(cfg, accountId ?? undefined);
+            const ctx = {
+                chatId: to,
+                account,
+                log: (...args) => log.warn(args.map(String).join(' ')),
+            };
+            const r = await (0, normalize_mentions_1.normalizeOutboundMentions)(text, ctx);
+            processed = r.normalizedText;
+            sentinels = r.sentinels;
+            resolvedAccountId = account.accountId;
+        }
+        catch (err) {
+            log.warn(`normalizeOutboundMentions failed in prepareTextForLark, using raw text: ${String(err)}`);
+        }
+    }
     // Convert markdown tables to Feishu-compatible format using per-account
     // tableMode setting.
     try {
@@ -65,7 +76,16 @@ function prepareTextForLark(cfg, text, accountId) {
     catch {
         // Runtime not available -- use the text as-is.
     }
-    return (0, markdown_style_1.optimizeMarkdownStyle)(processed, 1);
+    return {
+        text: (0, markdown_style_1.optimizeMarkdownStyle)(processed, 1),
+        sentinels,
+        resolvedAccountId,
+    };
+}
+function recordSentinelsForChat(resolvedAccountId, to, threadId, sentinels) {
+    if (!resolvedAccountId || sentinels.length === 0)
+        return;
+    (0, sentinel_store_1.getSentinelStore)(resolvedAccountId).recordSentinels((0, chat_queue_1.threadScopedKey)(to, threadId), sentinels);
 }
 /**
  * Unified IM message sender — handles both reply and create paths for any
@@ -181,7 +201,7 @@ function detectCardJson(text) {
  * ```
  */
 async function sendTextLark(params) {
-    const { cfg, to, text, replyToMessageId, replyInThread, accountId } = params;
+    const { cfg, to, text, replyToMessageId, replyInThread, accountId, threadId } = params;
     // Detect card JSON in text — route to card sending before text preprocessing.
     const card = detectCardJson(text);
     if (card) {
@@ -191,9 +211,11 @@ async function sendTextLark(params) {
     }
     log.info(`sendTextLark: target=${to}, textLength=${text.length}`);
     const client = lark_client_1.LarkClient.fromCfg(cfg, accountId).sdk;
-    const processedText = prepareTextForLark(cfg, text, accountId);
-    const content = buildPostContent(processedText);
-    return sendImMessage({ client, to, content, msgType: 'post', replyToMessageId, replyInThread });
+    const prepared = await prepareTextForLark(cfg, text, to, accountId);
+    const content = buildPostContent(prepared.text);
+    const result = await sendImMessage({ client, to, content, msgType: 'post', replyToMessageId, replyInThread });
+    recordSentinelsForChat(prepared.resolvedAccountId, to, threadId, prepared.sentinels);
+    return result;
 }
 /**
  * Send an interactive card message to a Feishu chat or user.

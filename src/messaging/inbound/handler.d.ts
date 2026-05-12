@@ -4,14 +4,16 @@
  *
  * Inbound message handling pipeline for the Lark/Feishu channel plugin.
  *
- * Orchestrates a seven-stage pipeline:
+ * Orchestrates a nine-stage pipeline:
  *   1. Account resolution
  *   2. Event parsing         → parse.ts (merge_forward expanded in-place)
- *   3. Sender enrichment     → enrich.ts (lightweight, before gate)
- *   4. Policy gate           → gate.ts
- *   5. User name prefetch    → enrich.ts (batch cache warm-up)
- *   6. Content resolution    → enrich.ts (media / quote, parallel)
- *   7. Agent dispatch        → dispatch.ts
+ *   3. Empty-message guard   → early return for text-less, media-less messages
+ *   4. Sender enrichment     → enrich.ts (lightweight, before gate)
+ *   5. Policy gate           → gate.ts
+ *   6. User name prefetch    → enrich.ts (batch cache warm-up)
+ *   7. Content resolution    → enrich.ts (media / quote, parallel)
+ *   8. Command authorization → plugin-sdk/command-auth
+ *   9. Agent dispatch        → dispatch.ts
  */
 import type { ClawdbotConfig, RuntimeEnv } from 'openclaw/plugin-sdk';
 import type { HistoryEntry } from 'openclaw/plugin-sdk/reply-history';

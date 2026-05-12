@@ -15,13 +15,13 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.parseMessageEvent = parseMessageEvent;
-const content_converter_1 = require("../converters/content-converter.js");
-const accounts_1 = require("../../core/accounts.js");
-const lark_client_1 = require("../../core/lark-client.js");
-const lark_logger_1 = require("../../core/lark-logger.js");
-const mention_1 = require("./mention.js");
-const user_name_cache_1 = require("./user-name-cache.js");
-const parse_io_1 = require("./parse-io.js");
+const content_converter_1 = require("../converters/content-converter");
+const accounts_1 = require("../../core/accounts");
+const lark_client_1 = require("../../core/lark-client");
+const lark_logger_1 = require("../../core/lark-logger");
+const mention_1 = require("./mention");
+const user_name_cache_1 = require("./user-name-cache");
+const parse_io_1 = require("./parse-io");
 const log = (0, lark_logger_1.larkLogger)('inbound/parse');
 // ---------------------------------------------------------------------------
 // Public API

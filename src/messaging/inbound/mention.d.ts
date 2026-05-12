@@ -20,9 +20,9 @@ export type { MentionInfo } from '../types';
 export declare function isMentionAll(mention: {
     key: string;
 }): boolean;
-/** Whether the bot was @-mentioned. */
+/** Whether the receiving bot itself was @-mentioned. */
 export declare function mentionedBot(ctx: MessageContext): boolean;
-/** All non-bot mentions. */
+/** All mentions excluding the receiving bot itself. */
 export declare function nonBotMentions(ctx: MessageContext): MentionInfo[];
 /**
  * Remove all @mention placeholder keys from the message text.

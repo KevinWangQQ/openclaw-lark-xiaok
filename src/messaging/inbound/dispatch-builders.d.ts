@@ -12,16 +12,18 @@ import type { HistoryEntry } from 'openclaw/plugin-sdk/reply-history';
 import type { MessageContext } from '../types';
 import type { LarkClient } from '../../core/lark-client';
 import type { DispatchContext } from './dispatch-context';
+import type { SentinelEntry } from './sentinel-store';
 /**
  * Build a `[System: ...]` mention annotation when the message @-mentions
- * non-bot users.  Returns `undefined` when there are no user mentions.
+ * non-self-bot users or when the previous reply had unresolved mentions.
+ * Returns `undefined` when there is nothing to report.
  *
  * Sender identity / chat metadata are handled by the SDK's own
  * `buildInboundUserContextPrefix` (via SenderId, SenderName, ReplyToBody,
  * InboundHistory, etc.), so we only inject the mention data that the SDK
  * does not natively support.
  */
-export declare function buildMentionAnnotation(ctx: MessageContext): string | undefined;
+export declare function buildMentionAnnotation(ctx: MessageContext, sentinels?: SentinelEntry[]): string | undefined;
 /**
  * Pure function: build the annotated message body with optional quote,
  * speaker prefix, and mention annotation (for the envelope Body).
@@ -31,7 +33,7 @@ export declare function buildMentionAnnotation(ctx: MessageContext): string | un
  * the body cleaner and avoiding misleading heuristics for non-text
  * message types (merge_forward, interactive cards, etc.).
  */
-export declare function buildMessageBody(ctx: MessageContext, quotedContent?: string): string;
+export declare function buildMessageBody(ctx: MessageContext, quotedContent?: string, sentinels?: SentinelEntry[]): string;
 /**
  * Build the BodyForAgent value: the clean message content plus an
  * optional mention annotation.
@@ -51,7 +53,7 @@ export declare function buildMessageBody(ctx: MessageContext, quotedContent?: st
  * The SDK's `detectAndLoadPromptImages` will discover image paths from
  * the text and inject them as multimodal content blocks.
  */
-export declare function buildBodyForAgent(ctx: MessageContext): string;
+export declare function buildBodyForAgent(ctx: MessageContext, sentinels?: SentinelEntry[]): string;
 /**
  * Unified call to `finalizeInboundContext`, eliminating the duplicated
  * field-mapping between permission notification and main message paths.

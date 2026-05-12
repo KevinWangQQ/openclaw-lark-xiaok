@@ -21,6 +21,8 @@ export interface SendTextLarkParams {
     replyToMessageId?: string;
     /** When true, the reply appears in the thread instead of main chat. */
     replyInThread?: boolean;
+    /** Thread root id when the reply lives inside a thread; used for sentinel keying. */
+    threadId?: string;
     /** Optional account identifier for multi-account setups. */
     accountId?: string;
 }

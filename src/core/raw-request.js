@@ -12,7 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.resolveDomainUrl = resolveDomainUrl;
 exports.rawLarkRequest = rawLarkRequest;
 const node_url_1 = require("node:url");
-const feishu_fetch_1 = require("./feishu-fetch.js");
+const feishu_fetch_1 = require("./feishu-fetch");
 // ---------------------------------------------------------------------------
 // Domain URL resolution
 // ---------------------------------------------------------------------------

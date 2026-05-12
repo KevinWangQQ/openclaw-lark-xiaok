@@ -11,12 +11,12 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.monitorFeishuProvider = monitorFeishuProvider;
-const accounts_1 = require("../core/accounts.js");
-const lark_client_1 = require("../core/lark-client.js");
-const lark_logger_1 = require("../core/lark-logger.js");
-const shutdown_hooks_1 = require("../core/shutdown-hooks.js");
-const dedup_1 = require("../messaging/inbound/dedup.js");
-const event_handlers_1 = require("./event-handlers.js");
+const accounts_1 = require("../core/accounts");
+const lark_client_1 = require("../core/lark-client");
+const lark_logger_1 = require("../core/lark-logger");
+const shutdown_hooks_1 = require("../core/shutdown-hooks");
+const dedup_1 = require("../messaging/inbound/dedup");
+const event_handlers_1 = require("./event-handlers");
 const mlog = (0, lark_logger_1.larkLogger)('channel/monitor');
 // ---------------------------------------------------------------------------
 // Single-account monitor

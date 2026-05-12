@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "lib": ["ES2023"],
+    "types": ["node"],
+    "strict": false,
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": false,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "forceConsistentCasingInFileNames": true,
+    "outDir": ".",
+    "rootDir": ".",
+    "removeComments": false
+  },
+  "include": ["index.ts", "src/**/*.ts"],
+  "exclude": ["node_modules", "dist", "tests"]
+}

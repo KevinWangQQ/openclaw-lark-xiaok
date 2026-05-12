@@ -16,20 +16,20 @@ exports.handleBotMembershipEvent = handleBotMembershipEvent;
 exports.handleVcMeetingInvitedEvent = handleVcMeetingInvitedEvent;
 exports.handleCommentEvent = handleCommentEvent;
 exports.handleCardActionEvent = handleCardActionEvent;
-const handler_1 = require("../messaging/inbound/handler.js");
-const reaction_handler_1 = require("../messaging/inbound/reaction-handler.js");
-const comment_handler_1 = require("../messaging/inbound/comment-handler.js");
-const vc_meeting_invited_handler_1 = require("../messaging/inbound/vc-meeting-invited-handler.js");
-const vc_sender_1 = require("../messaging/inbound/vc-sender.js");
-const comment_context_1 = require("../messaging/inbound/comment-context.js");
-const dedup_1 = require("../messaging/inbound/dedup.js");
-const lark_ticket_1 = require("../core/lark-ticket.js");
-const lark_logger_1 = require("../core/lark-logger.js");
-const auto_auth_1 = require("../tools/auto-auth.js");
-const ask_user_question_1 = require("../tools/ask-user-question.js");
-const chat_queue_1 = require("./chat-queue.js");
-const abort_detect_1 = require("./abort-detect.js");
-const interactive_dispatch_1 = require("./interactive-dispatch.js");
+const handler_1 = require("../messaging/inbound/handler");
+const reaction_handler_1 = require("../messaging/inbound/reaction-handler");
+const comment_handler_1 = require("../messaging/inbound/comment-handler");
+const vc_meeting_invited_handler_1 = require("../messaging/inbound/vc-meeting-invited-handler");
+const vc_sender_1 = require("../messaging/inbound/vc-sender");
+const comment_context_1 = require("../messaging/inbound/comment-context");
+const dedup_1 = require("../messaging/inbound/dedup");
+const lark_ticket_1 = require("../core/lark-ticket");
+const lark_logger_1 = require("../core/lark-logger");
+const auto_auth_1 = require("../tools/auto-auth");
+const ask_user_question_1 = require("../tools/ask-user-question");
+const chat_queue_1 = require("./chat-queue");
+const abort_detect_1 = require("./abort-detect");
+const interactive_dispatch_1 = require("./interactive-dispatch");
 const elog = (0, lark_logger_1.larkLogger)('channel/event-handlers');
 // ---------------------------------------------------------------------------
 // Event ownership validation
@@ -363,61 +363,16 @@ async function handleCommentEvent(ctx, data) {
 // ---------------------------------------------------------------------------
 async function handleCardActionEvent(ctx, data) {
     try {
-        // AskUserQuestion card interactions
+        // AskUserQuestion：表单卡片交互（宿主内建能力优先）
         const askResult = (0, ask_user_question_1.handleAskUserAction)(data, ctx.cfg, ctx.accountId);
         if (askResult !== undefined)
             return askResult;
-        // Auto-auth card actions
+        // auto-auth：授权/权限引导相关卡片交互（宿主内建能力优先）
         const authResult = await (0, auto_auth_1.handleCardAction)(data, ctx.cfg, ctx.accountId);
         if (authResult !== undefined)
             return authResult;
-        // Try SDK plugin interactive dispatch first (4.10+ native)
-        const sdkResult = await (0, interactive_dispatch_1.dispatchFeishuPluginInteractiveHandler)({ cfg: ctx.cfg, accountId: ctx.accountId, data });
-        if (sdkResult !== undefined)
-            return sdkResult;
-        // ── Patch 1: Non-OAuth card action → forward to agent as synthetic message ──
-        const operator = data.operator || {};
-        const openId = operator.open_id;
-        const action = data.action || {};
-        const actionValue = { ...(action.value || {}), ...(action.form_value || {}) };
-        if (action.tag) actionValue._action_tag = action.tag;
-        // _action_name resolution chain: card-author may have placed the button
-        // identifier in any of three spots. Try each in priority order so the
-        // agent always receives a usable identifier (observed: when the card
-        // author sets <button name="btn_done">, Feishu places it at action.name,
-        // not action.value._action_name — Patch 1 used to miss this and the
-        // agent saw only _action_tag:"button" with no way to dispatch).
-        if (!actionValue._action_name) {
-            actionValue._action_name = action.value?._action_name
-                                    || action.name
-                                    || action.form_value?._action_name
-                                    || undefined;
-        }
-        const chatId = data.open_chat_id || data.context?.open_chat_id || '';
-        const msgId = data.open_message_id || data.context?.open_message_id || '';
-        elog.info(`Non-OAuth card action from ${openId} in ${chatId}: ${JSON.stringify(actionValue)}`);
-        // Raw event dump for debugging future card-action shape regressions.
-        // Kept at debug level so it doesn't bloat info logs in steady state.
-        elog.debug?.(`raw card.action.trigger payload: ${JSON.stringify(data)}`);
-        const syntheticEvent = {
-            // sender_type:'user' is required so resolveSenderInfo (enrich.js:49)
-            // doesn't early-return with "skipping name resolution" — without this,
-            // ctx.senderName stays undefined and the agent prompt renders open_id
-            // for the speaker label (observed in live log at 23:29:13 / 23:29:36).
-            sender: { sender_id: { open_id: openId }, sender_type: 'user' },
-            message: {
-                message_id: msgId || `card_action_${Date.now()}`,
-                chat_id: chatId,
-                chat_type: chatId ? 'group' : 'p2p',
-                message_type: 'text',
-                content: JSON.stringify({ text: JSON.stringify(actionValue) }),
-            },
-        };
-        await (0, handler_1.handleFeishuMessage)({
-            cfg: ctx.cfg, event: syntheticEvent,
-            botOpenId: ctx.lark.botOpenId, runtime: ctx.runtime,
-            chatHistories: ctx.chatHistories, accountId: ctx.accountId,
-        });
+        // 业务自定义卡片交互：使用 SDK 标准 interactive dispatch 管道转发给业务插件。
+        return await (0, interactive_dispatch_1.dispatchFeishuPluginInteractiveHandler)({ cfg: ctx.cfg, accountId: ctx.accountId, data });
     }
     catch (err) {
         elog.warn(`card.action.trigger handler error: ${err}`);
